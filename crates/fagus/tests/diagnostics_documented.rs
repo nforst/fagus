@@ -78,7 +78,10 @@ fn emitted() -> BTreeSet<String> {
 
 /// The codes in the table of the section *Read diagnostics*.
 fn documented() -> BTreeSet<String> {
-    let text = fs::read_to_string(root().join("docs/troubleshooting.md")).unwrap();
+    // Git may check the file out with CRLF line endings, on Windows.
+    let text = fs::read_to_string(root().join("docs/troubleshooting.md"))
+        .unwrap()
+        .replace("\r\n", "\n");
     let section = text
         .split("\n## Read diagnostics\n")
         .nth(1)
