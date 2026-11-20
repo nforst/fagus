@@ -134,16 +134,18 @@ jobs:
         with:
           release: '14'
           prepare: |
+            set -e
             pkg install -y bash
             fetch -o /tmp/rustup-init https://static.rust-lang.org/rustup/dist/x86_64-unknown-freebsd/rustup-init
             chmod +x /tmp/rustup-init
             /tmp/rustup-init -y --profile minimal --default-toolchain none
           run: |
+            set -e
             . "$HOME/.cargo/env"
             freebsd-version
             cargo build --release --locked -p fagus-cli
             status=0
-            FAGUS="$PWD/target/release/fagus" tools/determinism.sh determinism || status=$?
+            FAGUS="$PWD/target/release/fagus" JOBS=$(sysctl -n hw.ncpu) tools/determinism.sh determinism || status=$?
             echo "$status" > determinism/status
             rm -rf target
       - run: exit "$(cat determinism/status)"

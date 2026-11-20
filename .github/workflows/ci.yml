@@ -93,11 +93,13 @@ jobs:
           envs: 'CARGO_TERM_COLOR RUSTFLAGS'
           copyback: false
           prepare: |
+            set -e
             pkg install -y dejavu
             fetch -o /tmp/rustup-init https://static.rust-lang.org/rustup/dist/x86_64-unknown-freebsd/rustup-init
             chmod +x /tmp/rustup-init
             /tmp/rustup-init -y --profile minimal --default-toolchain none
           run: |
+            set -e
             . "$HOME/.cargo/env"
             freebsd-version
             cargo test --workspace --locked
