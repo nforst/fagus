@@ -111,7 +111,8 @@ getrandom = "0.3.4"
 stringprep = "0.1.5"
 unicode-normalization = "0.1.25"
 clap = { version = "4.6.7", features = ["derive"] }
-# The peak resident size of the worker on macOS (getrusage), which it reports with every document.
+# The peak resident size of the worker on macOS and FreeBSD (getrusage), which it reports with
+# every document.
 nix = { version = "0.31.4", default-features = false, features = ["resource"] }
 anyhow = "1.0.104"
 serde = { version = "1.0.229", features = ["derive"] }

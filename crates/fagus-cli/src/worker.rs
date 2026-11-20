@@ -807,7 +807,11 @@ mod tests {
         assert_eq!(frames[2].header["pages"], 1);
         assert!(frames[2].blobs[0].starts_with(b"%PDF-"));
         // The worker's memory, where the system tells it.
-        if cfg!(any(target_os = "linux", target_os = "macos")) {
+        if cfg!(any(
+            target_os = "linux",
+            target_os = "macos",
+            target_os = "freebsd"
+        )) {
             assert!(
                 frames[2].header["maxRss"]
                     .as_u64()
@@ -1031,7 +1035,11 @@ mod tests {
         // The worker's memory comes with failures too, where the system tells it.
         assert_eq!(
             frames[1].header.get("maxRss").is_some(),
-            cfg!(any(target_os = "linux", target_os = "macos"))
+            cfg!(any(
+                target_os = "linux",
+                target_os = "macos",
+                target_os = "freebsd"
+            ))
         );
     }
 

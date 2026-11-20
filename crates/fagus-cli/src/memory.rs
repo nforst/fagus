@@ -6,32 +6,34 @@
 pub(crate) struct Resident {
     /// The resident size now (Linux).
     pub(crate) now: Option<u64>,
-    /// The largest resident size the process has had (Linux and macOS).
+    /// The largest resident size the process has had (Linux, macOS and FreeBSD).
     pub(crate) peak: Option<u64>,
 }
 
 /// The resident memory of this process: on Linux both sizes, from `/proc/self/status` (in
-/// kibibytes, so the page size that `/proc/self/statm` counts in is not needed); on macOS the
-/// peak, from `getrusage`, as the size now needs a call into the kernel that only unsafe code can
-/// make; elsewhere nothing.
+/// kibibytes, so the page size that `/proc/self/statm` counts in is not needed); on macOS and
+/// FreeBSD the peak, from `getrusage`, as the size now needs a call into the kernel (or, on
+/// FreeBSD, a `/proc` that is rarely mounted) that only unsafe code can make; elsewhere nothing.
 pub(crate) fn resident() -> Resident {
     #[cfg(target_os = "linux")]
     {
         std::fs::read_to_string("/proc/self/status")
             .map_or_else(|_| Resident::default(), |status| parse_status(&status))
     }
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "freebsd"))]
     {
         use nix::sys::resource::{UsageWho, getrusage};
-        // In bytes on macOS (in kibibytes on Linux and the BSDs).
+        // In bytes on macOS, in kibibytes on FreeBSD (and Linux).
+        let unit = if cfg!(target_os = "macos") { 1 } else { 1024 };
         Resident {
             now: None,
             peak: getrusage(UsageWho::RUSAGE_SELF)
                 .ok()
-                .and_then(|usage| u64::try_from(usage.max_rss()).ok()),
+                .and_then(|usage| u64::try_from(usage.max_rss()).ok())
+                .map(|size| size * unit),
         }
     }
-    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "freebsd")))]
     {
         Resident::default()
     }
@@ -114,7 +116,11 @@ mod tests {
     #[test]
     fn knows_its_own_memory_where_the_system_tells_it() {
         let resident = resident();
-        if cfg!(any(target_os = "linux", target_os = "macos")) {
+        if cfg!(any(
+            target_os = "linux",
+            target_os = "macos",
+            target_os = "freebsd"
+        )) {
             // At least the binary's pages are resident.
             assert!(resident.peak.is_some_and(|peak| peak > 1 << 20), "{resident:?}");
         }

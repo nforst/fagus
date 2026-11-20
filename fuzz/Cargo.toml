@@ -27,7 +27,7 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 
 # For the worker target's memory report and trimming (fagus-cli's `memory.rs`).
-[target.'cfg(target_os = "macos")'.dependencies]
+[target.'cfg(any(target_os = "macos", target_os = "freebsd"))'.dependencies]
 nix = { version = "0.31.4", default-features = false, features = ["resource"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
