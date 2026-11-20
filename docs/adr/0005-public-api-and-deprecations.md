@@ -123,7 +123,7 @@ What this decision needed in the code, and where it stands:
 - `Engine` warns on a binary of another release and refuses one of another protocol, and [protocol.md](../protocol.md) names the release that added each field (0.3.0).
 - The types of `fagus` listed under *Rust* are `#[non_exhaustive]`, with constructors for those users make; the documentation builds them with the constructors (0.3.0). Code that built `Attachment`, `Date`, `Diagnostic` or `Output` with a struct literal, or matched over one of the enums without a `_` arm, changes once, before 1.0.
 - CI builds and tests the workspace with Rust 1.97, the `rust-version` (job *msrv*).
-- Still to do before 1.0: a test that every diagnostics code the crates emit is listed in [troubleshooting.md](../troubleshooting.md#read-diagnostics), and the other way round.
+- A test (`crates/fagus/tests/diagnostics_documented.rs`) checks that every diagnostics code the crates emit is listed in [troubleshooting.md](../troubleshooting.md#read-diagnostics), and the other way round.
 - When the first deprecation needs them: the code `css.deprecated`, the warning for deprecated command line options, and a helper in `Fagus\Internal` that triggers a PHP deprecation once per call site.
 
 `UPGRADING.md` collects the changes since 0.1.0 that can need action, in a section for 1.0, so that an update from any 0.x release is covered in one place, and has a section *Next major* for what is planned to break later. `SECURITY.md` lists the supported versions, `CONTRIBUTING.md` and [releasing.md](../releasing.md) the rules for contributors and for a release.
