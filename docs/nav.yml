@@ -31,6 +31,7 @@
 - { page: pdf, title: The PDF, group: Reference, seo: "The PDF: forms, signatures, PDF/A, PDF/UA, ZUGFeRD", description: "Links, fill-in forms, passwords, digital signatures, tagged PDF (PDF/UA), PDF/A, attachments, ZUGFeRD and Factur-X invoices, reproducible output." }
 - { page: cli, title: Command line, group: Reference, seo: "Command line: HTML to PDF with the fagus binary", description: "The fagus binary renders HTML files to PDF on the command line, exactly as the PHP package does: options, exit codes, examples, threads and the worker." }
 - { page: rust, title: Rust library, group: Reference, seo: "Rust library: the Fagus engine as a crate", description: "Render PDFs inside a Rust program with the crate fagus, the engine the PHP package and the command line tool are built on, without a separate process." }
+- { page: ffi, title: C library (experimental), group: Internals, optional: true }
 - { page: protocol, title: Worker protocol, group: Internals, optional: true }
 - { page: releasing, title: Releasing, group: Internals, optional: true }
 - { page: adr/README, title: Architecture decisions, group: Internals, optional: true }
@@ -41,3 +42,4 @@
 - { page: adr/0005-public-api-and-deprecations, title: "5. Public API, semantic versioning and deprecations", group: Internals, parent: Architecture decisions, optional: true }
 - { page: adr/0006-pages-that-grow-with-their-content, title: 6. Pages that grow with their content, group: Internals, parent: Architecture decisions, optional: true }
 - { page: adr/0007-layers-for-screen-and-print, title: "7. Layers for screen and print, and form fields as an option", group: Internals, parent: Architecture decisions, optional: true }
+- { page: adr/0008-c-library-experimental, title: 8. An experimental C library beside the worker, group: Internals, parent: Architecture decisions, optional: true }

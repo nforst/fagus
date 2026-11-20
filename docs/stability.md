@@ -40,6 +40,8 @@ What these pages describe is the public API:
   package supports the binary of its own release; with a binary of another release it renders
   but warns (`onWarning`), since that binary ignores options newer than itself.
 - **CSS:** the [extensions](extensions.md) with the `-fagus-` prefix.
+- **Not the C library.** The [C library](ffi.md) is experimental: its functions and options may
+  change in any release ([ADR 8](adr/0008-c-library-experimental.md)).
 - **Diagnostics:** the codes, such as `css.invalid-value`, and what they mean
   ([Troubleshooting](troubleshooting.md#read-diagnostics)), and the three severities `info`,
   `warning` and `error`. Not their messages, and not which severity a diagnostic has: a minor
