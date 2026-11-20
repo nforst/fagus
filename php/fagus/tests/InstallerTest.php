@@ -86,7 +86,9 @@ final class InstallerTest extends TestCase
         if (! is_file($workflow)) {
             $this->markTestSkipped('Not in the repository.');
         }
-        preg_match_all('/\{ target: ([a-z0-9_-]+),/', (string) file_get_contents($workflow), $matches);
+        // The targets of the job `build`, which makes the binaries; other jobs (the C library) have their own.
+        preg_match('/^  build:\n(.*?)(?=^  [a-z][a-z-]*:$)/ms', (string) file_get_contents($workflow), $job);
+        preg_match_all('/\{ target: ([a-z0-9_-]+),/', $job[1] ?? '', $matches);
         $published = $matches[1];
         sort($published);
         $platforms = [
