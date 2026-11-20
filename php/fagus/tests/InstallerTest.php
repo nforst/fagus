@@ -87,7 +87,7 @@ final class InstallerTest extends TestCase
             $this->markTestSkipped('Not in the repository.');
         }
         // The targets of the job `build`, which makes the binaries; other jobs (the C library) have their own.
-        preg_match('/^  build:\n(.*?)(?=^  [a-z][a-z-]*:$)/ms', (string) file_get_contents($workflow), $job);
+        preg_match('/^  build:\n(.*?)(?=^  [a-z][a-z-]*:$)/ms', str_replace("\r\n", "\n", (string) file_get_contents($workflow)), $job);
         preg_match_all('/\{ target: ([a-z0-9_-]+),/', $job[1] ?? '', $matches);
         $published = $matches[1];
         sort($published);
