@@ -1,6 +1,6 @@
 # 8. An experimental C library beside the worker
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-11-20
 
 ## Context
