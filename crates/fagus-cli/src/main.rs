@@ -3,6 +3,7 @@
 mod date;
 mod layout_json;
 mod memory;
+mod request;
 mod sandbox;
 mod worker;
 
@@ -442,19 +443,6 @@ fn strict_failure(count: usize) -> String {
     format!("{count} {noun} in strict mode")
 }
 
-/// An invoice profile by its name on the command line and in the protocol.
-fn profile(name: &str) -> Option<fagus::FacturXProfile> {
-    Some(match name {
-        "minimum" => fagus::FacturXProfile::Minimum,
-        "basicwl" => fagus::FacturXProfile::BasicWl,
-        "basic" => fagus::FacturXProfile::Basic,
-        "en16931" => fagus::FacturXProfile::En16931,
-        "extended" => fagus::FacturXProfile::Extended,
-        "xrechnung" => fagus::FacturXProfile::XRechnung,
-        _ => return None,
-    })
-}
-
 /// A MIME type from a file name's extension.
 fn mime_type(name: &str) -> &'static str {
     match name.rsplit('.').next().map(str::to_ascii_lowercase).as_deref() {
@@ -559,7 +547,7 @@ fn main() -> Result<()> {
                 document = document.root(root);
             }
             if let Some(created) = created {
-                let Some(date) = worker::date(&created) else {
+                let Some(date) = request::date(&created) else {
                     bail!(
                         "invalid date `{created}`, expected e.g. 2026-11-13T12:00:00Z or 2026-11-13T14:00:00+02:00"
                     );
@@ -587,7 +575,7 @@ fn main() -> Result<()> {
             }
             if let Some(path) = factur_x {
                 let xml = std::fs::read(&path).with_context(|| format!("reading {}", path.display()))?;
-                document = match profile.as_deref().and_then(self::profile) {
+                document = match profile.as_deref().and_then(request::profile) {
                     None => document.factur_x(xml),
                     Some(profile) => document.factur_x_profile(xml, profile),
                 };

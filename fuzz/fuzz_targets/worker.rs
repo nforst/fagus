@@ -20,6 +20,8 @@ mod date;
 mod layout_json;
 #[path = "../../crates/fagus-cli/src/memory.rs"]
 mod memory;
+#[path = "../../crates/fagus-cli/src/request.rs"]
+mod request;
 #[path = "../../crates/fagus-cli/src/worker.rs"]
 mod worker;
 
@@ -42,19 +44,6 @@ mod sandbox {
     pub(crate) fn status() -> Status {
         Status::Off
     }
-}
-
-/// An invoice profile by its name (as in fagus-cli's `main.rs`).
-fn profile(name: &str) -> Option<fagus::FacturXProfile> {
-    Some(match name {
-        "minimum" => fagus::FacturXProfile::Minimum,
-        "basicwl" => fagus::FacturXProfile::BasicWl,
-        "basic" => fagus::FacturXProfile::Basic,
-        "en16931" => fagus::FacturXProfile::En16931,
-        "extended" => fagus::FacturXProfile::Extended,
-        "xrechnung" => fagus::FacturXProfile::XRechnung,
-        _ => return None,
-    })
 }
 
 /// A message from the caller.
