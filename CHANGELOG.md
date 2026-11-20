@@ -5,6 +5,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-20
+
 ### Added
 
 - `Pdf::inline()` and `Pdf::download()` send a PDF to the browser in one call: `Content-Type`, `Content-Disposition` (`inline` or `attachment`, with the file name and a `filename*` for names that are not ASCII), `Content-Length` and the PDF. `Document::inline()` and `Document::download()` render and send it, as `save()` renders and writes it: `Fagus::html($html)->inline('invoice.pdf')`. They throw a `FagusException` if output was already sent. Before, plain PHP needed the headers by hand and `echo $pdf->bytes()`; Laravel's `inline()` and `download()` responses stay as they are.
@@ -143,7 +145,8 @@ The first release: a native engine that turns HTML and CSS into PDF the way Chro
 - No network access and no scripts: resources come only from `data:` URLs, the caller and files inside the document's root directory.
 - Limits on nesting, grids, frames, images and the size of substituted values, so that hostile documents render in bounded time and memory, and a panic becomes an error instead of ending the caller. The engine has no `unsafe` code of its own.
 
-[Unreleased]: https://github.com/nforst/fagus/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/nforst/fagus/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/nforst/fagus/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/nforst/fagus/compare/v0.2.0...v1.0.0
 [0.2.0]: https://github.com/nforst/fagus/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/nforst/fagus/releases/tag/v0.1.0
