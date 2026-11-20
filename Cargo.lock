@@ -853,6 +853,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "fagus-ffi"
+version = "0.2.0"
+dependencies = [
+ "fagus",
+ "rayon",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "fagus-layout"
 version = "0.2.0"
 dependencies = [

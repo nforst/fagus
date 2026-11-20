@@ -128,7 +128,8 @@ libc = "0.2.191"
 
 [workspace.lints.rust]
 # Every library crate forbids unsafe code itself (`#![forbid(unsafe_code)]`); the command line
-# allows it in one place, to call glibc's `malloc_trim` (crates/fagus-cli/src/memory.rs).
+# allows it in one place, to call glibc's `malloc_trim` (crates/fagus-cli/src/memory.rs), and the
+# experimental C library in the functions C calls (crates/fagus-ffi/src/abi.rs).
 unsafe_code = "deny"
 unused_qualifications = "warn"
 rust_2018_idioms = { level = "warn", priority = -1 }

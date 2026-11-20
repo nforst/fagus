@@ -1,0 +1,32 @@
+[package]
+name = "fagus-ffi"
+description = "Experimental C library of Fagus, for calling it in-process (PHP FFI and other languages)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://fagus.niklasforst.de/docs/ffi"
+
+[lints]
+workspace = true
+
+[lib]
+name = "fagus_ffi"
+# The shared library (libfagus_ffi.so, .dylib, fagus_ffi.dll) for FFI, the static one for C
+# programs that link it in, and the Rust library for the tests.
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[dependencies]
+fagus.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+rayon = { workspace = true, optional = true }
+
+[features]
+default = ["parallel"]
+# Writes the PDF on a pool of threads (see the feature of fagus-pdf).
+parallel = ["fagus/parallel", "dep:rayon"]
