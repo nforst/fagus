@@ -76,6 +76,44 @@ jobs:
           grep -Eq "Landlock: (Fully|Partially)Enforced" log.txt
           grep -q "seccomp: enforced" log.txt
 
+  # FreeBSD, which release.yml builds a binary for and GitHub has no runner for: the tests pass in
+  # a FreeBSD VM on Linux, the binary renders outside a sandbox (there is none on FreeBSD), and
+  # with system fonts it finds the fonts that fontconfig's configuration in /usr/local/etc/fonts
+  # lists (crates/fagus-text/src/system.rs): DejaVu, moved where only local.conf names it, gives
+  # the Hebrew letters that the built-in Inter lacks. gates.yml renders the corpus there.
+  freebsd:
+    name: FreeBSD 14 (x64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: vmactions/freebsd-vm@v1
+        with:
+          release: '14'
+          envs: 'CARGO_TERM_COLOR RUSTFLAGS'
+          copyback: false
+          prepare: |
+            pkg install -y dejavu
+            fetch -o /tmp/rustup-init https://static.rust-lang.org/rustup/dist/x86_64-unknown-freebsd/rustup-init
+            chmod +x /tmp/rustup-init
+            /tmp/rustup-init -y --profile minimal --default-toolchain none
+          run: |
+            . "$HOME/.cargo/env"
+            freebsd-version
+            cargo test --workspace --locked
+            cargo build --locked -p fagus-cli
+            echo '<p>FreeBSD</p>' > probe.html
+            FAGUS_LOG=debug target/debug/fagus render probe.html -o probe.pdf 2> log.txt
+            cat log.txt
+            grep -q "no sandbox on this system" log.txt
+            test "$(head -c 5 probe.pdf)" = "%PDF-"
+            mkdir -p /usr/local/etc/fonts /opt/fagus-fonts
+            mv "$(dirname "$(find /usr/local/share/fonts -name DejaVuSans.ttf)")" /opt/fagus-fonts/
+            printf '<fontconfig><dir>/opt/fagus-fonts</dir></fontconfig>\n' > /usr/local/etc/fonts/local.conf
+            echo '<p lang="he">&#x05E9;&#x05DC;&#x05D5;&#x05DD;</p>' > hebrew.html
+            if target/debug/fagus render hebrew.html -o hebrew.pdf --strict; then exit 1; fi
+            target/debug/fagus render hebrew.html -o hebrew.pdf --strict --system-fonts
+
   # The fuzz targets (fuzz/, a workspace of its own on nightly) still build: the worker target
   # includes the protocol code of fagus-cli, and fuzz.yml runs only at night.
   fuzz:

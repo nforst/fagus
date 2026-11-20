@@ -121,9 +121,44 @@ jobs:
             determinism/pdf
           retention-days: 7
 
+  # The same for FreeBSD, which has no runner: built and run in a FreeBSD VM on Linux, as
+  # release.yml builds its binary. The status of the script comes back with its files, so that
+  # they are uploaded when it fails too.
+  determinism-freebsd:
+    name: determinism (freebsd-x64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: vmactions/freebsd-vm@v1
+        with:
+          release: '14'
+          prepare: |
+            pkg install -y bash
+            fetch -o /tmp/rustup-init https://static.rust-lang.org/rustup/dist/x86_64-unknown-freebsd/rustup-init
+            chmod +x /tmp/rustup-init
+            /tmp/rustup-init -y --profile minimal --default-toolchain none
+          run: |
+            . "$HOME/.cargo/env"
+            freebsd-version
+            cargo build --release --locked -p fagus-cli
+            status=0
+            FAGUS="$PWD/target/release/fagus" tools/determinism.sh determinism || status=$?
+            echo "$status" > determinism/status
+            rm -rf target
+      - run: exit "$(cat determinism/status)"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: determinism-freebsd-x64
+          path: |
+            determinism/SHA256SUMS
+            determinism/pdf
+          retention-days: 7
+
   same-bytes:
     name: same bytes on every platform
-    needs: determinism
+    needs: [determinism, determinism-freebsd]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:

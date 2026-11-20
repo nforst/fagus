@@ -24,8 +24,15 @@ pdfs=$out/pdf
 rm -rf "$pdfs"
 mkdir -p "$pdfs"
 
+# In the format of sha256sum ("<sum>  <file>"), also with FreeBSD's sha256.
 sha256() {
-  if command -v sha256sum > /dev/null; then sha256sum "$@"; else shasum -a 256 "$@"; fi
+  if command -v sha256sum > /dev/null; then
+    sha256sum "$@"
+  elif command -v shasum > /dev/null; then
+    shasum -a 256 "$@"
+  else
+    sha256 -r "$@" | sed 's/ /  /'
+  fi
 }
 
 for page in "$root"/tests/corpus/*.html "$root"/tests/corpus/*/*.html; do
