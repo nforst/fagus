@@ -16,7 +16,7 @@ Composer installs the binary of the package's release into the package's `bin` d
 `cargo build --release` as `target/release/fagus`.
 
 ```sh
-fagus --version     # fagus 0.2.0
+fagus --version     # fagus 1.0.0
 fagus --help
 fagus render --help
 ```

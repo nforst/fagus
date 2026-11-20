@@ -4,14 +4,14 @@ Fagus renders HTML and CSS that may come from untrusted sources. Security report
 
 ## Supported versions
 
-Security fixes go into the latest minor version, as a patch release. Once a new major version is out, the last minor version of the previous major gets security fixes for six more months; older minor versions get none, since an update within a major needs no changes ([stability](docs/stability.md)). Before 1.0, only the newest minor version is supported.
+Security fixes go into the latest minor version, as a patch release. Once a new major version is out, the last minor version of the previous major gets security fixes for six more months; older minor versions get none, since an update within a major needs no changes ([stability](docs/stability.md)). Versions before 1.0 get no security fixes: [UPGRADING.md](UPGRADING.md) covers the update.
 
 | Version | Security fixes |
 |---|---|
-| 0.2.x | Yes, until 0.3.0 is released |
-| < 0.2 | No |
+| 1.0.x | Yes |
+| < 1.0 | No (update to 1.0) |
 
-From 1.0 on, the table reads like this, for example after 2.0.0 and 2.1.0:
+After a new major version, the table reads like this, for example after 2.0.0 and 2.1.0:
 
 | Version | Security fixes |
 |---|---|

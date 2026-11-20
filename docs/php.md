@@ -65,7 +65,7 @@ with `useEngine()`, else one created on first use with the default settings (the
 `FAGUS_BINARY`, the installed one or the `PATH`, no font directories, no system fonts).
 
 ```php
-Fagus::engine()->version(); // "0.2.0"
+Fagus::engine()->version(); // "1.0.0"
 ```
 
 ### `Fagus::useEngine(?Engine $engine): void`
@@ -574,7 +574,7 @@ Fagus::engine()->addFont(file_get_contents(__DIR__.'/resources/fonts/CorporateSa
 
 ### `version(): string`
 
-The version of the running binary, such as `0.2.0`. Starts the worker if it is not running.
+The version of the running binary, such as `1.0.0`. Starts the worker if it is not running.
 
 ### `sandbox(): string`
 

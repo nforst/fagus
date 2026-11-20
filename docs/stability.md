@@ -8,10 +8,10 @@ what goes away. The reasons are in [ADR 5](adr/0005-public-api-and-deprecations.
 Fagus follows [Semantic Versioning](https://semver.org). The PHP package, the binary, the Rust
 crate and the worker protocol are released together, with one version number.
 
-- **Before 1.0** (now: 0.2.0), a minor release such as 0.3.0 may change the API. The
-  [changelog](../CHANGELOG.md) lists every such change under
-  *Changed* or *Removed*, with what to do instead. Patch releases such as 0.2.1 only fix bugs.
-  Require `^0.2` in Composer to get the patch releases and not the next minor one.
+- **Before 1.0**, a minor release such as 0.2.0 could change the API. The
+  [changelog](../CHANGELOG.md) lists every such change under *Changed* or *Removed*, with what
+  to do instead, and [UPGRADING.md](../UPGRADING.md) collects those that matter for an update
+  to 1.0.
 - **From 1.0 on**, only a major release (2.0) breaks the API. Minor releases (1.1) add to it and
   may deprecate parts of it; patch releases (1.0.1) fix bugs. `^1.0` is safe.
 

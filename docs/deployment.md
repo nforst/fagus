@@ -128,8 +128,8 @@ fagus-x86_64-unknown-freebsd
 ```
 
 ```sh
-FAGUS_DOWNLOAD_URL=https://artifacts.example.com/fagus/0.2.0 composer install
-FAGUS_DOWNLOAD_URL=/mnt/artifacts/fagus/0.2.0 vendor/bin/fagus-install
+FAGUS_DOWNLOAD_URL=https://artifacts.example.com/fagus/1.0.0 composer install
+FAGUS_DOWNLOAD_URL=/mnt/artifacts/fagus/1.0.0 vendor/bin/fagus-install
 ```
 
 The binary is installed only if its SHA-256 is the one the package lists for its release,

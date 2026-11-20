@@ -26,7 +26,7 @@ What the code does today, at 0.2.0:
 - Security fixes may break whatever relied on the hole, in any release.
 - Security fixes go into the latest minor release, as a patch release (1.4.1). Once a new major release is out (2.0.0), the last minor release of the previous major (1.9) gets security fixes for six more months, so that an upgrade across the major can be planned. Older minor releases get none: updating within a major needs no change, so the fix is an update away. Before 1.0, only the newest minor release gets security fixes; the six months apply first to the last 1.x release, once 2.0.0 is out. `SECURITY.md` lists the supported versions.
 - Breaking changes that are planned for the next major release are collected in `UPGRADING.md` under *Next major* as soon as they are decided, together with the deprecation that prepares them, so that users see them early. A milestone of the issue tracker for that major, should there be one, lists them too.
-- Before 1.0, a minor release (0.3.0) may break any part of the API. Every such change is listed in `CHANGELOG.md` under *Changed* or *Removed*, with what to do instead. Patch releases (0.2.1) do not break anything. Deprecating first is welcome, not required.
+- Before 1.0, a minor release (0.2.0) may break any part of the API. Every such change is listed in `CHANGELOG.md` under *Changed* or *Removed*, with what to do instead. Patch releases (0.2.1) do not break anything. Deprecating first is welcome, not required.
 
 ### PHP and Laravel
 
@@ -120,8 +120,8 @@ Breaking changes wait for a major release, so they are collected before they are
 
 What this decision needed in the code, and where it stands:
 
-- `Engine` warns on a binary of another release and refuses one of another protocol, and [protocol.md](../protocol.md) names the release that added each field (0.3.0).
-- The types of `fagus` listed under *Rust* are `#[non_exhaustive]`, with constructors for those users make; the documentation builds them with the constructors (0.3.0). Code that built `Attachment`, `Date`, `Diagnostic` or `Output` with a struct literal, or matched over one of the enums without a `_` arm, changes once, before 1.0.
+- `Engine` warns on a binary of another release and refuses one of another protocol, and [protocol.md](../protocol.md) names the release that added each field (1.0.0).
+- The types of `fagus` listed under *Rust* are `#[non_exhaustive]`, with constructors for those users make; the documentation builds them with the constructors (1.0.0). Code that built `Attachment`, `Date`, `Diagnostic` or `Output` with a struct literal, or matched over one of the enums without a `_` arm, changes once, before 1.0.
 - CI builds and tests the workspace with Rust 1.97, the `rust-version` (job *msrv*).
 - A test (`crates/fagus/tests/diagnostics_documented.rs`) checks that every diagnostics code the crates emit is listed in [troubleshooting.md](../troubleshooting.md#read-diagnostics), and the other way round.
 - When the first deprecation needs them: the code `css.deprecated`, the warning for deprecated command line options, and a helper in `Fagus\Internal` that triggers a PHP deprecation once per call site.

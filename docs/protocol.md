@@ -103,7 +103,7 @@ The header of `R`; fields other than `id` and `html` may be left out:
 - `accessible`: whether the PDF conforms to PDF/UA-1 (and is tagged). The document needs a
   title, a language and alternative text for every image; otherwise the answer is `E`.
 - `forms`: whether the form controls become the fields of an interactive form (`false` if left
-  out; see [pdf.md](pdf.md#fill-in-forms)). Added in 0.3.0: a worker of an older release
+  out; see [pdf.md](pdf.md#fill-in-forms)). Added in 1.0.0: a worker of an older release
   ignores it and prints the controls as they look, which the caller notices by the missing
   `forms` in `P`.
 - `attachments`: `name` and `mime` are required. `relationship` is `source`, `data`,
@@ -132,7 +132,7 @@ The header of `R`; fields other than `id` and `html` may be left out:
   (RFC 4013), as PDF 2.0 requires. An unknown permission, no password, a password that SASLprep
   refuses, and `encryption` together with `conformance` or `facturX` are answered with `E`;
   together with `accessible` it writes an encrypted PDF/UA file.
-  Added in 0.3.0: an older worker ignores the field and writes the PDF unencrypted, which the
+  Added in 1.0.0: an older worker ignores the field and writes the PDF unencrypted, which the
   caller notices by the missing `encrypted` in `P`.
 
 - `memoryBudget`: the memory budget of the document in bytes, `0` for none; the worker's
@@ -141,7 +141,7 @@ The header of `R`; fields other than `id` and `html` may be left out:
   `?`; `0` for none, the worker's (`--time-limit`, else none) if left out or `null`. A document
   that needs more is answered with `E`, with the diagnostic `limit.memory` or `limit.time`, and
   the worker goes on with the next request ([cli.md](cli.md#limits) says what the budget counts).
-  Added in 0.3.0: an older worker ignores both.
+  Added in 1.0.0: an older worker ignores both.
 
 A request the worker cannot use (a missing data block, an unknown PDF/A level, relationship or
 profile, an invalid date) is answered with `E` and its reason, as is a document that does not
@@ -282,7 +282,7 @@ certificates the check needs; no data blocks where the status cannot be had. An 
 the worker answer the request with `E`, as does data that is neither.
 
 A request with both `signature` and `encryption` signs the encrypted PDF. `signature`, `S`, `s`,
-`T` and `t` were added in 0.3.0: an older worker ignores `signature` and writes the PDF unsigned,
+`T` and `t` were added in 1.0.0: an older worker ignores `signature` and writes the PDF unsigned,
 which the caller notices by the missing `signed` in `P`.
 
 ### Fonts
@@ -324,13 +324,13 @@ than that ignores them:
 | Field | Message | Since |
 |---|---|---|
 | `facturX.version`, `facturX.description` | `R` | 0.2.0 |
-| `layout` | `R`, `P` | 0.3.0 |
-| `forms` | `R`, `P` | 0.3.0 |
-| `encryption` | `R` | 0.3.0 |
-| `encrypted` | `P` | 0.3.0 |
-| `signature`; the messages `S`, `s`, `T`, `t` | `R` | 0.3.0 |
-| `signature.certify`, `element`, `area`, `revocation`, `archiveTimestamp`; the messages `V`, `v` | `R` | 0.3.0 |
-| `signed` | `P` | 0.3.0 |
-| `rss`, `maxRss` | `P`, `E` | 0.3.0 |
-| `sandbox` | `H` | 0.3.0 |
-| `memoryBudget`, `timeLimit` | `R` | 0.3.0 |
+| `layout` | `R`, `P` | 1.0.0 |
+| `forms` | `R`, `P` | 1.0.0 |
+| `encryption` | `R` | 1.0.0 |
+| `encrypted` | `P` | 1.0.0 |
+| `signature`; the messages `S`, `s`, `T`, `t` | `R` | 1.0.0 |
+| `signature.certify`, `element`, `area`, `revocation`, `archiveTimestamp`; the messages `V`, `v` | `R` | 1.0.0 |
+| `signed` | `P` | 1.0.0 |
+| `rss`, `maxRss` | `P`, `E` | 1.0.0 |
+| `sandbox` | `H` | 1.0.0 |
+| `memoryBudget`, `timeLimit` | `R` | 1.0.0 |
