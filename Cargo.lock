@@ -956,6 +956,7 @@ name = "fagus-text"
 version = "0.2.0"
 dependencies = [
  "brotli-decompressor",
+ "fontconfig-parser",
  "fontdb",
  "harfrust",
  "icu_segmenter",

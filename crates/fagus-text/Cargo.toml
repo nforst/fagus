@@ -29,3 +29,10 @@ thiserror.workspace = true
 wuff.workspace = true
 fontdb.workspace = true
 brotli-decompressor.workspace = true
+
+# fontconfig's configuration, which FreeBSD keeps in /usr/local/etc/fonts (src/system.rs).
+[target.'cfg(target_os = "freebsd")'.dependencies]
+fontconfig-parser.workspace = true
+
+[dev-dependencies]
+fontconfig-parser.workspace = true

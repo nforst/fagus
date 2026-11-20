@@ -97,18 +97,75 @@ fn macos_directories() -> Vec<PathBuf> {
     directories
 }
 
+/// The configuration of fontconfig on FreeBSD, whose packages install it under `/usr/local`
+/// rather than in `/etc/fonts`, where fontdb looks for it.
+#[cfg(target_os = "freebsd")]
+const FREEBSD_FONTCONFIG: &str = "/usr/local/etc/fonts";
+
+/// The existing font directories that the fontconfig configuration in `directory` lists, in its
+/// order, each once and none inside one listed before: those of `fonts.conf`, of the files in
+/// `conf.d` and of `local.conf`, which `fonts.conf` includes by paths relative to its directory
+/// (the parser would take them relative to `/etc/fonts`).
+#[cfg(any(target_os = "freebsd", test))]
+fn fontconfig_directories(directory: &std::path::Path) -> Vec<PathBuf> {
+    let mut files = vec![directory.join("fonts.conf")];
+    if let Ok(entries) = std::fs::read_dir(directory.join("conf.d")) {
+        let mut included: Vec<PathBuf> = entries
+            .flatten()
+            .map(|entry| entry.path())
+            .filter(|path| path.extension().is_some_and(|extension| extension == "conf"))
+            .collect();
+        included.sort();
+        files.extend(included);
+    }
+    files.push(directory.join("local.conf"));
+    let mut fontconfig = fontconfig_parser::FontConfig::default();
+    for file in files {
+        // As fontdb does: a file that cannot be read or parsed adds nothing, the others count.
+        let _ = fontconfig.merge_config(&file);
+    }
+    let mut directories: Vec<PathBuf> = Vec::new();
+    for listed in fontconfig.dirs {
+        let Ok(path) = std::fs::canonicalize(&listed.path) else {
+            continue;
+        };
+        if path.is_dir() && !directories.iter().any(|known| path.starts_with(known)) {
+            directories.push(path);
+        }
+    }
+    directories
+}
+
 impl SystemFonts {
     /// Scans the fonts of the system: on macOS `/System/Library/Fonts` (with `Supplemental`),
     /// `/Library/Fonts` and `~/Library/Fonts`; on Linux the directories that fontconfig lists
-    /// (else `/usr/share/fonts`, `/usr/local/share/fonts` and `~/.local/share/fonts`); on Windows
-    /// `%WINDIR%\Fonts` and the fonts installed for the user.
+    /// (else `/usr/share/fonts`, `/usr/local/share/fonts` and `~/.local/share/fonts`); on FreeBSD
+    /// those that fontconfig lists in `/usr/local/etc/fonts` (else the same as on Linux); on
+    /// Windows `%WINDIR%\Fonts` and the fonts installed for the user.
     pub(crate) fn scan() -> Self {
         let mut index = fontdb::Database::new();
         #[cfg(target_os = "macos")]
         for directory in macos_directories() {
             index.load_fonts_dir(directory);
         }
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(target_os = "freebsd")]
+        {
+            // fontdb reads `FONTCONFIG_FILE` and `/etc/fonts` itself.
+            let directories = if std::env::var_os("FONTCONFIG_FILE").is_none()
+                && !std::path::Path::new("/etc/fonts/fonts.conf").exists()
+            {
+                fontconfig_directories(std::path::Path::new(FREEBSD_FONTCONFIG))
+            } else {
+                Vec::new()
+            };
+            if directories.is_empty() {
+                index.load_system_fonts();
+            }
+            for directory in directories {
+                index.load_fonts_dir(directory);
+            }
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "freebsd")))]
         index.load_system_fonts();
         Self::from_index(index, |_| None)
     }
@@ -412,7 +469,51 @@ impl SystemFonts {
 
 #[cfg(test)]
 mod tests {
-    use super::system_weight;
+    use super::{fontconfig_directories, system_weight};
+
+    /// A configuration as FreeBSD's packages install it: directories in `fonts.conf`, in the
+    /// files of `conf.d` and in `local.conf`, one of them listed twice, one inside another, one
+    /// missing.
+    #[test]
+    fn reads_the_directories_of_a_fontconfig_configuration() {
+        let root = std::env::temp_dir().join(format!("fagus-fontconfig-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        for directory in ["etc/conf.d", "share/fonts/TTF", "lib/fonts", "local", "other"] {
+            std::fs::create_dir_all(root.join(directory)).unwrap();
+        }
+        let root = std::fs::canonicalize(&root).unwrap();
+        let config = |directories: &[&str]| {
+            let directories = directories
+                .iter()
+                .map(|path| format!("<dir>{}</dir>", root.join(path).display()))
+                .collect::<Vec<_>>()
+                .concat();
+            format!(
+                "<?xml version=\"1.0\"?>\n<!DOCTYPE fontconfig SYSTEM \"urn:fontconfig:fonts.dtd\">\n\
+                 <fontconfig>{directories}<include ignore_missing=\"yes\">conf.d</include></fontconfig>"
+            )
+        };
+        let write = |file: &str, directories: &[&str]| {
+            std::fs::write(root.join("etc").join(file), config(directories)).unwrap();
+        };
+        write("fonts.conf", &["share/fonts", "missing"]);
+        write("conf.d/20-more.conf", &["share/fonts/TTF", "share/fonts"]);
+        write("conf.d/10-more.conf", &["lib/fonts"]);
+        write("conf.d/README", &["other"]);
+        write("local.conf", &["local"]);
+        let directories = fontconfig_directories(&root.join("etc"));
+        let none = fontconfig_directories(&root.join("none"));
+        std::fs::remove_dir_all(&root).unwrap();
+        assert_eq!(
+            directories,
+            [
+                root.join("share/fonts"),
+                root.join("lib/fonts"),
+                root.join("local")
+            ]
+        );
+        assert_eq!(none, Vec::<std::path::PathBuf>::new());
+    }
 
     #[test]
     fn reads_weights_from_numbered_names() {
