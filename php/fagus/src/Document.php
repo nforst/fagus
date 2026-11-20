@@ -354,6 +354,29 @@ final class Document
     }
 
     /**
+     * Renders the document and sends the PDF to the browser to show it, as {@see Pdf::inline()}.
+     */
+    public function inline(string $filename = 'document.pdf', ?Engine $engine = null): Pdf
+    {
+        $pdf = $this->render($engine);
+        $pdf->inline($filename);
+
+        return $pdf;
+    }
+
+    /**
+     * Renders the document and sends the PDF to the browser as a download, as
+     * {@see Pdf::download()}.
+     */
+    public function download(string $filename = 'document.pdf', ?Engine $engine = null): Pdf
+    {
+        $pdf = $this->render($engine);
+        $pdf->download($filename);
+
+        return $pdf;
+    }
+
+    /**
      * The render request of the worker protocol: its header and data blocks.
      *
      * @return array{0: array<string, mixed>, 1: list<string>}

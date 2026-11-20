@@ -30,6 +30,7 @@ composer require nforst/fagus
 use Fagus\Fagus;
 
 Fagus::html($html)->save('invoice.pdf');
+Fagus::html($html)->inline('invoice.pdf'); // or show it in the browser
 ```
 
 Fagus is a Composer package that turns HTML and CSS into PDF the way Chrome prints them. There is

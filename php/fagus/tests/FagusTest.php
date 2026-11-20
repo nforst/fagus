@@ -24,6 +24,7 @@ use Fagus\Layout\Section;
 use Fagus\Permission;
 use Fagus\Relationship;
 use Fagus\Severity;
+use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
@@ -292,6 +293,19 @@ final class FagusTest extends TestCase
         } finally {
             @unlink($path);
         }
+    }
+
+    #[Test]
+    #[RunInSeparateProcess]
+    public function it_sends_pdfs_to_the_browser(): void
+    {
+        ob_start();
+        $inline = Fagus::html('<p>Browser</p>')->inline('invoice.pdf');
+        $download = Fagus::html('<p>Download</p>')->download('invoice.pdf');
+        $output = (string) ob_get_clean();
+
+        $this->assertSame($inline->bytes().$download->bytes(), $output);
+        $this->assertStringStartsWith('%PDF-', $output);
     }
 
     #[Test]

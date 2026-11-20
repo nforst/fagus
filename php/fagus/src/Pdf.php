@@ -88,4 +88,60 @@ final readonly class Pdf
             throw new FagusException("The PDF could not be written to `{$path}`.");
         }
     }
+
+    /**
+     * Sends the PDF to the browser to show it: `Content-Type`, `Content-Disposition: inline`
+     * with `$filename`, `Content-Length` and the PDF.
+     *
+     * @throws FagusException when output was already sent, so that headers cannot be
+     */
+    public function inline(string $filename = 'document.pdf'): void
+    {
+        $this->send('inline', $filename);
+    }
+
+    /**
+     * Sends the PDF to the browser as a download (`Content-Disposition: attachment`) named
+     * `$filename`.
+     *
+     * @throws FagusException when output was already sent, so that headers cannot be
+     */
+    public function download(string $filename = 'document.pdf'): void
+    {
+        $this->send('attachment', $filename);
+    }
+
+    /**
+     * The `Content-Disposition` header for `$filename`: control characters and slashes are left
+     * out, and a name that is not plain ASCII also goes as `filename*` (RFC 6266), with an ASCII
+     * `filename` for older clients.
+     *
+     * @internal
+     */
+    public static function contentDisposition(string $disposition, string $filename): string
+    {
+        $filename = str_replace(['/', '\\'], '_', (string) preg_replace('/[\x00-\x1F\x7F]/', '', $filename));
+        if (trim($filename) === '') {
+            $filename = 'document.pdf';
+        }
+
+        // One `_` for each character, or for each byte of a name that is not UTF-8.
+        $fallback = (string) (preg_replace('/[^\x20-\x7E]|[%"]/u', '_', $filename)
+            ?? preg_replace('/[^\x20-\x7E]|[%"]/', '_', $filename));
+        $header = "{$disposition}; filename=\"{$fallback}\"";
+
+        return $fallback === $filename ? $header : $header."; filename*=UTF-8''".rawurlencode($filename);
+    }
+
+    private function send(string $disposition, string $filename): void
+    {
+        if (headers_sent($file, $line)) {
+            throw new FagusException("The PDF cannot be sent: output already started at {$file}:{$line}, before its headers.");
+        }
+
+        header('Content-Type: application/pdf');
+        header('Content-Disposition: '.self::contentDisposition($disposition, $filename));
+        header('Content-Length: '.strlen($this->bytes));
+        echo $this->bytes;
+    }
 }

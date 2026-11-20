@@ -33,6 +33,7 @@ $pdf->pages();
 $pdf->diagnostics();  // CSS that was ignored, resources that are missing, with their position
 $pdf->timings();      // milliseconds per phase: parse, style, layout, paint, pdf
 $pdf->save('invoice.pdf');
+$pdf->inline('invoice.pdf');   // or send it to the browser: headers and PDF
 ```
 
 ## `Fagus`
@@ -359,6 +360,26 @@ page count and diagnostics.
 $pdf = Fagus::html($html)->save(storage_path('invoices/2026-0042.pdf'));
 ```
 
+### `inline(string $filename = 'document.pdf', ?Engine $engine = null): Pdf`
+
+Renders the document and sends the PDF to the browser to show it, as [`Pdf::inline()`](#pdf) does:
+the headers and the PDF in one call. Returns the `Pdf`.
+
+```php
+Fagus::html($html)->inline('invoice.pdf');
+```
+
+### `download(string $filename = 'document.pdf', ?Engine $engine = null): Pdf`
+
+Renders the document and sends the PDF to the browser as a download, as `Pdf::download()` does.
+
+```php
+Fagus::html($html)->download("invoice-{$number}.pdf");
+```
+
+In Laravel, return `Fagus::view(…)->inline()` or `->download()` from the controller instead
+([laravel.md](laravel.md)); they make a response, which these methods do not.
+
 ### What comes from the document
 
 There are no methods for page size, margins, headers, footers or metadata. As in a browser, they
@@ -387,6 +408,8 @@ come from the document:
 | `timings(): array<string, float>` | Milliseconds per phase, with the keys `parse`, `style`, `layout`, `paint` and `pdf`. |
 | `layout(): Layout` | Where the elements with an `id` ended up (see [Find where elements landed](#find-where-elements-landed)). Throws a `FagusException` if the document was rendered without `reportLayout()`. |
 | `save(string $path): void` | Writes the PDF to `$path`. Throws a `FagusException` ("The PDF could not be written to `…`.") if it cannot. |
+| `inline(string $filename = 'document.pdf'): void` | Sends the PDF to the browser to show it: `Content-Type: application/pdf`, `Content-Disposition: inline` with the file name, `Content-Length`, then the PDF. A name that is not ASCII goes as `filename*` with an ASCII fallback; control characters and slashes are left out. Throws a `FagusException` if output was already sent, since the headers cannot follow it. |
+| `download(string $filename = 'document.pdf'): void` | As `inline()`, with `Content-Disposition: attachment`: the browser downloads the PDF. |
 
 ```php
 $pdf = Fagus::html($html)->render();
