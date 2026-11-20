@@ -5,6 +5,10 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-20
+
+The first stable release: from now on, only a major release changes the API ([stability](docs/stability.md)). [UPGRADING.md](UPGRADING.md) lists what an update from 0.x can need.
+
 ### Added
 
 - Footnotes (CSS Generated Content for Paged Media 3), as WeasyPrint and Prince print them; Chrome has none. `float: footnote` moves an element into the footnote area at the bottom of the page its call is on, which `@page { @footnote { … } }` styles (margins, borders, padding, background, `max-height`; a top margin of `1em` by default) and which takes its room from the content of the page. `::footnote-call` (a superscript `counter(footnote)` by default) stays in the text, `::footnote-marker` (`counter(footnote) ". "`) starts the footnote. The `footnote` counter counts through the document, or from each page that resets it with `@page { counter-reset: footnote }`. A footnote that does not fit starts below the line of its call and goes on at the top of the next page's footnote area, or goes there whole where not even `orphans` lines of it fit (`footnote-policy: auto`; the text after the call stays where it fits); `line` and `block` take the line or the paragraph of its call with it. `footnote-display: inline` and `compact` set footnotes side by side, on lines that break across pages too. The call is a link to its footnote, the marker one back to the call. Tagged PDFs have each footnote as a `Note` with its marker as a label, and the call and the marker as `Link`s with their annotations. `float-reference` takes `inline`, `region` and `page`, which all put footnotes into the footnote area of the page, and `column`, which puts a footnote called in a column of a multi-column layout into a footnote area at the bottom of that column, as Prince does: balanced columns are balanced with their footnotes, and a footnote that does not fit takes the line of its call to the next column. Before, `float: footnote` was ignored with a `css.invalid-value` diagnostic, and `footnote-display`, `footnote-policy` and `float-reference` were unknown properties.
@@ -135,6 +139,7 @@ The first release: a native engine that turns HTML and CSS into PDF the way Chro
 - No network access and no scripts: resources come only from `data:` URLs, the caller and files inside the document's root directory.
 - Limits on nesting, grids, frames, images and the size of substituted values, so that hostile documents render in bounded time and memory, and a panic becomes an error instead of ending the caller. The engine has no `unsafe` code of its own.
 
-[Unreleased]: https://github.com/nforst/fagus/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/nforst/fagus/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/nforst/fagus/compare/v0.2.0...v1.0.0
 [0.2.0]: https://github.com/nforst/fagus/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/nforst/fagus/releases/tag/v0.1.0
