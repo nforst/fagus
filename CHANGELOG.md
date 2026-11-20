@@ -33,6 +33,8 @@ All notable changes to this project are documented in this file. The format is b
 - SECURITY.md describes the threat model, the limits and the risks that remain.
 - A compatibility page in the documentation (`docs/compatibility.md`) with the pass rates of the reftests of web-platform-tests by directory, which `tools/wpt/run.sh` runs at a pinned commit with Fagus rendering both test and reference (nightly in CI, against the expectations in `tools/wpt/expectations.txt`; the manual tests of named strings in `css-gcpm` against references of our own in `tools/wpt/references`), and a release gate that prints the corpus with Chrome for Testing 157 on Linux and requires 95 % of the documents to match Fagus' within a tolerance (`tools/chrome-corpus.sh`).
 - `tools/validate.sh` also renders the corpus as encrypted PDF/UA-1, without and with a user password, and checks both with veraPDF (the latter decrypted by qpdf, after it shows that the extraction for accessibility is allowed).
+- Binaries for FreeBSD on x64 (`x86_64-unknown-freebsd`), built and tested on FreeBSD 14, which the installer picks on FreeBSD (#2). They print the same PDF as the other platforms. There is no sandbox on FreeBSD; the worker reports its peak memory (`maxRss`) as on macOS, and with system fonts Fagus reads the directories that fontconfig's configuration in `/usr/local/etc/fonts` lists.
+- `FAGUS_INSTALL_STRICT=1`, or `"extra": {"fagus": {"install-strict": true}}` in the root `composer.json`, makes `composer install` and `composer update` fail with the reason when the binary cannot be installed, instead of printing a warning (#2). The default is unchanged.
 
 ### Changed
 

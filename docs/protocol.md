@@ -208,7 +208,7 @@ corner of each page box, rounded to a hundredth of a point:
 
 `rss` and `maxRss` are the worker's resident memory after the document, in bytes: now and the
 largest it has been since the worker started. On Linux the worker sends both (from
-`/proc/self/status`), on macOS only `maxRss` (from `getrusage`), on Windows neither. A caller can
+`/proc/self/status`), on macOS and FreeBSD only `maxRss` (from `getrusage`), on Windows neither. A caller can
 replace a worker that has grown by closing its input and starting a new one, as the PHP package
 does with `maxMemory` ([deployment.md](deployment.md#restart-workers)).
 

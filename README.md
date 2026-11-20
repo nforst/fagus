@@ -39,7 +39,8 @@ happens in a native engine written in Rust, which Composer downloads for your pl
 against its SHA-256) and which PHP keeps running as a worker process between documents.
 
 - **Simple:** `composer require` is all it takes, on Linux (x64 and arm64, glibc or musl, so Alpine
-  too), macOS (Intel and Apple silicon) and Windows x64. Every platform prints the same PDF.
+  too), macOS (Intel and Apple silicon), Windows x64 and FreeBSD x64. Every platform prints the
+  same PDF.
 - **Fast:** a one-page invoice in about 2.5 ms once the worker runs, ten pages in about 17 ms,
   measured from PHP on an Apple M2 Pro (tagged PDF). The first document of a process takes about
   9 ms. For one page that is 10 to 30 times faster than mPDF, Dompdf or a Chrome kept running,

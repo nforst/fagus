@@ -373,7 +373,7 @@ This writes `config/fagus.php`. Every key, with its environment variable and def
 | `tagged` | – | `true` | Whether PDFs are tagged with the logical structure that screen readers read. Single documents can say otherwise with `tagged()` or ask for PDF/UA with `accessible()`. |
 | `timeout` | – | `60` | Seconds to wait for each answer of the worker before it is stopped. Not on Windows, where PHP cannot wait for a pipe with a time limit. |
 | `max_documents` | `FAGUS_MAX_DOCUMENTS` | `null` | The documents a worker process renders before it is replaced with a new one. No limit if `null` ([deployment.md](deployment.md#restart-workers)). |
-| `max_memory` | `FAGUS_MAX_MEMORY` | `null` | Megabytes of resident memory: a worker process that has more after a document is replaced with a new one (Linux and macOS). No limit if `null`. |
+| `max_memory` | `FAGUS_MAX_MEMORY` | `null` | Megabytes of resident memory: a worker process that has more after a document is replaced with a new one (Linux, macOS and FreeBSD). No limit if `null`. |
 | `memory_budget` | `FAGUS_MEMORY_BUDGET` | `null` | Megabytes one document may take, all its parts together; one that needs more throws a `RenderException` (`limit.memory`). 2048 if `null`, none if `0` ([php.md](php.md#limits)). |
 | `time_limit` | `FAGUS_TIME_LIMIT` | `null` | Seconds one document may take in all; one that takes longer throws a `RenderException` (`limit.time`) and the worker goes on. A tenth less than `timeout` if `null`, none if `0`. |
 | `sandbox` | `FAGUS_SANDBOX` | `true` | Whether the worker renders in its sandbox on Linux, without network, programs or writing files ([cli.md](cli.md#sandbox)). Turn it off only to debug. |

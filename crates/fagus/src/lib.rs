@@ -774,8 +774,8 @@ impl Engine {
     }
 
     /// Adds the fonts installed on the system, as Chrome finds them: on macOS those in
-    /// `/System/Library/Fonts`, `/Library/Fonts` and `~/Library/Fonts`, on Linux those
-    /// fontconfig lists, on Windows those in `%WINDIR%\Fonts` and the user's. They serve the
+    /// `/System/Library/Fonts`, `/Library/Fonts` and `~/Library/Fonts`, on Linux and FreeBSD
+    /// those fontconfig lists, on Windows those in `%WINDIR%\Fonts` and the user's. They serve the
     /// families that documents name, the generic families as in Chrome (Times for `serif`,
     /// Helvetica for `sans-serif`, Menlo for `monospace`, San Francisco for `system-ui`, and
     /// Hiragino, PingFang or Apple SD Gothic Neo by the language of the text) and fallback for

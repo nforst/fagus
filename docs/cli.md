@@ -342,8 +342,8 @@ The sandbox only guards in depth: the engine reads no files outside the root and
 code of its own. It is a best effort. A kernel without Landlock (older than 5.13, or with
 Landlock not enabled at boot) or a container that refuses the calls renders without that part;
 `FAGUS_LOG=debug` prints which parts are in force to standard error, and the worker says so in
-its `H` frame ([protocol.md](protocol.md#messages)). On macOS and Windows there is no sandbox,
-and `--no-sandbox` changes nothing.
+its `H` frame ([protocol.md](protocol.md#messages)). On macOS, FreeBSD and Windows there is no
+sandbox, and `--no-sandbox` changes nothing.
 
 `--memory-limit` and `--cpu-limit` set the resource limits of the process (`RLIMIT_AS`,
 `RLIMIT_CPU`), with or without the sandbox, and only on Linux; elsewhere they are an error. The

@@ -57,7 +57,7 @@ What Fagus promises for untrusted documents:
 On Linux, the binary renders in a [sandbox](docs/cli.md#sandbox) (Landlock and seccomp) that
 backs the first two up: should a bug in Fagus or in a crate it uses be exploited, the process
 still cannot open sockets, start programs, write files or (with `fagus render`, or a worker with
-`--allow-read`) read files outside its directories. There is no sandbox on macOS and Windows.
+`--allow-read`) read files outside its directories. There is no sandbox on macOS, FreeBSD and Windows.
 
 ### Limits
 

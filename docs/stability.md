@@ -24,7 +24,8 @@ What these pages describe is the public API:
 - **PHP and Laravel:** the classes, methods, enums and exceptions of [PHP API](php.md), with the
   names of their parameters; the facade, `PendingPdf`, the configuration keys and the commands of
   [Laravel](laravel.md); `Installer` and `vendor/bin/fagus-install`; the environment variables
-  (`FAGUS_BINARY`, `FAGUS_DOWNLOAD_URL`, `FAGUS_GITHUB_TOKEN`, and those of `config/fagus.php`
+  (`FAGUS_BINARY`, `FAGUS_DOWNLOAD_URL`, `FAGUS_GITHUB_TOKEN`, `FAGUS_INSTALL_STRICT` with
+  `extra.fagus.install-strict` in `composer.json`, and those of `config/fagus.php`
   such as `FAGUS_SYSTEM_FONTS`, `FAGUS_LOCALE` and `FAGUS_SANDBOX`). Not covered: anything marked
   `@internal`, the namespace `Fagus\Internal`, and where the installer puts the binary inside
   the package: ask `Installer::install()` for its path, or set `FAGUS_BINARY`.

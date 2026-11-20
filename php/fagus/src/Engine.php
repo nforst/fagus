@@ -83,7 +83,7 @@ final class Engine
      *                           date formats) where documents give no `lang`, e.g. "de-DE"; en-US if null
      * @param  ?int  $maxDocuments  the documents a worker renders before it is replaced by a new one; no limit if null
      * @param  ?int  $maxMemory  megabytes of resident memory above which a worker is replaced after a document,
-     *                           as far as the system tells the worker (Linux: now, macOS: at its peak; not Windows)
+     *                           as far as the system tells the worker (Linux: now, macOS and FreeBSD: at its peak; not Windows)
      * @param  ?Closure(string): void  $onWarning  receives warnings, such as a binary of another release than
      *                                           this package; written to PHP's error log (error_log()) if null
      * @param  bool  $sandbox  whether the worker renders in its sandbox on Linux (docs/cli.md#sandbox)
@@ -218,7 +218,7 @@ final class Engine
     private function rendered(array $reply): void
     {
         $this->documents++;
-        // The resident size now where the worker knows it (Linux), else the peak (macOS).
+        // The resident size now where the worker knows it (Linux), else the peak (macOS, FreeBSD).
         $resident = $reply['rss'] ?? $reply['maxRss'] ?? null;
         if (
             ($this->maxDocuments !== null && $this->documents >= $this->maxDocuments)

@@ -1270,11 +1270,11 @@ impl FontDb {
     }
 
     /// Adds the fonts installed on the system (on macOS those in `/System/Library/Fonts`,
-    /// `/Library/Fonts` and `~/Library/Fonts`; on Linux those fontconfig lists; on Windows those
-    /// in `%WINDIR%\Fonts` and the user's), which then serve as in Chrome: for families that
-    /// documents name, for the generic families (Times for `serif`, Helvetica for `sans-serif`,
-    /// Menlo for `monospace` … and, by the language of the text, Hiragino, PingFang or Apple SD
-    /// Gothic Neo) and for fallback. Fonts added otherwise and those of documents come first for
+    /// `/Library/Fonts` and `~/Library/Fonts`; on Linux and FreeBSD those fontconfig lists; on
+    /// Windows those in `%WINDIR%\Fonts` and the user's), which then serve as in Chrome: for
+    /// families that documents name, for the generic families (Times for `serif`, Helvetica for
+    /// `sans-serif`, Menlo for `monospace` … and, by the language of the text, Hiragino, PingFang
+    /// or Apple SD Gothic Neo) and for fallback. Fonts added otherwise and those of documents come first for
     /// their families. The faces are only indexed now and parsed when used. Returns the number
     /// of faces found.
     pub fn add_system_fonts(&mut self) -> usize {

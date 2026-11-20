@@ -71,8 +71,9 @@ binary from source and set `FAGUS_BINARY` ([deployment.md](deployment.md#use-a-b
 There is no fagus binary for Linux on armv7l. Build it from source with `cargo build --release` and set FAGUS_BINARY to it.
 ```
 
-Releases have binaries for Linux (x64, arm64, glibc and musl), macOS (x64, arm64) and Windows
-(x64). Other platforms need a binary built from source.
+Releases have binaries for Linux (x64, arm64, glibc and musl), macOS (x64, arm64), Windows (x64)
+and FreeBSD (x64). Other platforms, such as OpenBSD, NetBSD or FreeBSD on arm64, need a binary
+built from source.
 
 ### The download failed
 

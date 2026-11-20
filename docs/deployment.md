@@ -31,6 +31,36 @@ Builds run Composer without asking, so two things must be in place:
 `--no-scripts` does not stop the plugin; `--no-plugins` does. After `--no-plugins`, run
 `vendor/bin/fagus-install`.
 
+### Fail the build without the binary
+
+If the binary cannot be installed, the plugin prints a warning and Composer succeeds; the engine
+then fails at the first PDF. To let a build or deployment fail at `composer install` instead,
+set `FAGUS_INSTALL_STRICT=1` in Composer's environment:
+
+```sh
+FAGUS_INSTALL_STRICT=1 composer install --no-dev --no-interaction
+```
+
+```text
+fagus: There is no fagus binary for OpenBSD on amd64. Build it from source with `cargo build --release` and set FAGUS_BINARY to it.
+fagus: Composer fails because FAGUS_INSTALL_STRICT is set. `vendor/bin/fagus-install` tries again.
+```
+
+Composer then exits with status 1, also for a development version without binaries. To make it
+the rule for a project, put it into the root `composer.json`; `FAGUS_INSTALL_STRICT=0` turns it
+off again, for example on a machine that uses a binary of its own:
+
+```json
+"extra": {
+    "fagus": {
+        "install-strict": true
+    }
+}
+```
+
+The variable belongs to the environment that runs Composer (the build or deployment script), not
+to Laravel's `.env`, which Composer does not read.
+
 The plugin keeps downloaded binaries in Composer's cache directory (`<cache-dir>/fagus/<version>/`),
 so a build with a cached Composer directory downloads each binary once.
 
@@ -94,6 +124,7 @@ fagus-aarch64-unknown-linux-musl
 fagus-x86_64-apple-darwin
 fagus-aarch64-apple-darwin
 fagus-x86_64-pc-windows-msvc.exe
+fagus-x86_64-unknown-freebsd
 ```
 
 ```sh
@@ -159,6 +190,34 @@ Under PHP-FPM the pool's environment is cleared by default (`clear_env = yes`), 
   `composer update` replaces it; otherwise the installer reports that it could not write the
   binary.
 
+## FreeBSD
+
+- The binary is `fagus-x86_64-unknown-freebsd`, for amd64, built and tested on FreeBSD 14. It
+  prints the same PDF as the other platforms. FreeBSD on arm64 and the other BSDs have no binary:
+  build one from source (`cargo build --release -p fagus-cli`) and set `FAGUS_BINARY`.
+- There is no [sandbox](cli.md#sandbox): the worker renders with the rights of the PHP process,
+  so give documents a root of assets only ([below](#untrusted-documents)). `--memory-limit` and
+  `--cpu-limit` are only supported on Linux; limit the process with the system's means instead,
+  such as `limits(1)` or `rctl(8)`.
+- The worker reports the largest resident size it has had, as on macOS, which `maxMemory`
+  compares ([restart workers](#restart-workers)).
+- The binary needs no installed fonts. With `systemFonts: true` it reads the directories that
+  fontconfig's configuration in `/usr/local/etc/fonts` lists, else `/usr/local/share/fonts`
+  and the other directories of Linux ([fonts.md](fonts.md#use-the-fonts-installed-on-the-system)).
+
+On shared hosting:
+
+- PHP must be allowed to start programs: the engine runs the binary with `proc_open()`, which must
+  not be in `disable_functions`. `php -r 'var_dump(function_exists("proc_open"));'` prints
+  `bool(true)` where it is allowed; ask the host otherwise.
+- The binary must be executable where it lies. Where `vendor` is on a file system mounted
+  `noexec`, install it into another directory with `vendor/bin/fagus-install /path/to/dir` and
+  set `FAGUS_BINARY` to `/path/to/dir/fagus`.
+- Where the server cannot reach GitHub, upload the binary of the release and point
+  `FAGUS_DOWNLOAD_URL` at its directory ([above](#servers-without-access-to-github)).
+- With `FAGUS_INSTALL_STRICT=1`, a deployment that runs `composer install` fails when the binary
+  cannot be installed ([above](#fail-the-build-without-the-binary)).
+
 ## Worker processes
 
 The PHP package starts the binary as a worker process with the first document and talks to it
@@ -209,8 +268,8 @@ the next document starts a new one, which gets the fonts of `addFont()` again; t
 process costs 3 to 4 ms once. Both are off by default.
 
 `maxMemory` compares the resident size the worker reports with every document
-([protocol.md](protocol.md#rendering)): on Linux its size after the document, on macOS the
-largest it has been since it started. The resident size counts the binary's own pages too,
+([protocol.md](protocol.md#rendering)): on Linux its size after the document, on macOS and
+FreeBSD the largest it has been since it started. The resident size counts the binary's own pages too,
 about 20 MB; a limit below what one document needs replaces the worker after every document.
 On Windows the worker does not report its memory and only `maxDocuments` applies.
 

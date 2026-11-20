@@ -15,6 +15,7 @@ browser, Node or Docker image to install.
   | Linux with musl (Alpine) | x64, arm64 |
   | macOS | x64 (Intel), arm64 (Apple silicon) |
   | Windows | x64 |
+  | FreeBSD (14 or newer) | x64 |
 
 - For the Laravel integration: Laravel 13. Older versions of Laravel conflict with the package.
 
@@ -56,7 +57,9 @@ the package's release for the platform Composer runs on:
 
 If the binary cannot be installed, Composer does not fail: it prints a warning that starts with
 `fagus:` and goes on. Run `vendor/bin/fagus-install` (in Laravel: `php artisan fagus:install`)
-to try again; [troubleshooting.md](troubleshooting.md) lists the messages. Servers without access
+to try again; [troubleshooting.md](troubleshooting.md) lists the messages. With
+`FAGUS_INSTALL_STRICT=1`, Composer fails instead
+([deployment.md](deployment.md#fail-the-build-without-the-binary)). Servers without access
 to GitHub, Docker builds and binaries of your own are covered in [deployment.md](deployment.md).
 
 ## Your first PDF in PHP

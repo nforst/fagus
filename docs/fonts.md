@@ -242,6 +242,9 @@ Fagus then finds fonts where Chrome finds them:
 - **macOS:** `/System/Library/Fonts`, `/Library/Fonts` and `~/Library/Fonts`.
 - **Linux:** the directories fontconfig lists, else `/usr/share/fonts`, `/usr/local/share/fonts`
   and `~/.local/share/fonts`.
+- **FreeBSD:** the directories that fontconfig's configuration in `/usr/local/etc/fonts` lists
+  (`fonts.conf`, `conf.d` and `local.conf`), else those of Linux. Font packages such as
+  `dejavu` or `noto` install into `/usr/local/share/fonts`.
 - **Windows:** `%WINDIR%\Fonts` and the fonts installed for the user.
 
 With system fonts:
@@ -415,7 +418,7 @@ Embedded subsets are also what PDF/A requires, so PDF/A needs no extra font sett
 With system fonts off (the default), the fonts of a document are exactly the built-in Inter, your
 font directories, the fonts added with `addFont()` and the document's `@font-face` rules. Hyphenation
 dictionaries and line breaking rules are built into Fagus. A document therefore renders the same PDF
-on Linux, macOS and Windows, as long as the fonts and the document are the same.
+on Linux, macOS, Windows and FreeBSD, as long as the fonts and the document are the same.
 
 For byte-identical files, also fix the creation date:
 

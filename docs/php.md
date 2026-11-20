@@ -780,7 +780,7 @@ try {
 | `RenderException` | The document cannot be rendered (for example PDF/UA requirements that are not met), or has diagnostics in strict mode. `diagnostics(): list<Diagnostic>` returns the diagnostics strict mode refused, or those found before rendering failed (CSS that was ignored, resources that are missing), which often explain the failure. |
 | `EngineException` | The binary was not found or could not be started, a font directory does not exist, the worker did not answer within the timeout, it stopped, it speaks another protocol, it cannot encrypt (a binary older than `encrypt()`, which would have written the PDF without a password), or a font passed to `addFont()` cannot be read. When the worker has exited, the message ends with its exit code and what it wrote to its error output. |
 | `InvalidArgumentException` | A value Fagus does not know, such as a PDF/A level passed to `pdfA()` as a string that is not one, or `encrypt()` without a password. |
-| `InstallException` | The binary could not be installed: a development version without binaries, an unsupported platform, a failed download, a checksum mismatch, or a directory that cannot be written. Thrown by `Installer`, `vendor/bin/fagus-install` and `php artisan fagus:install`; the Composer plugin turns it into a warning. |
+| `InstallException` | The binary could not be installed: a development version without binaries, an unsupported platform, a failed download, a checksum mismatch, or a directory that cannot be written. Thrown by `Installer`, `vendor/bin/fagus-install` and `php artisan fagus:install`; the Composer plugin turns it into a warning, or into an error with `FAGUS_INSTALL_STRICT` ([deployment.md](deployment.md#fail-the-build-without-the-binary)). |
 
 The exact messages are listed in [troubleshooting.md](troubleshooting.md).
 
@@ -800,6 +800,7 @@ $path = (new Installer(
 ))->install();            // or ->install('/opt/fagus') for another directory
 
 Installer::target();          // "x86_64-unknown-linux-musl" on Alpine on x64
+Installer::target('FreeBSD', 'amd64'); // "x86_64-unknown-freebsd"; the BSDs by their name, not "BSD"
 Installer::asset('x86_64-pc-windows-msvc'); // "fagus-x86_64-pc-windows-msvc.exe"
 ```
 
