@@ -6,11 +6,11 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// Endings of file names the sources mention, such as `"logo.png"`, which have the shape of a
-/// code but are none.
+/// Endings of file names the sources mention, such as `"logo.png"` or fontconfig's `"conf.d"`,
+/// which have the shape of a code but are none.
 const FILE_ENDINGS: &[&str] = &[
-    "avif", "bmp", "css", "csv", "der", "gif", "html", "jpeg", "jpg", "js", "json", "md", "otf", "p12",
-    "pdf", "pem", "png", "svg", "tif", "tiff", "ttf", "txt", "webp", "woff", "woff2", "xml",
+    "avif", "bmp", "conf", "css", "csv", "d", "der", "gif", "html", "jpeg", "jpg", "js", "json", "md", "otf",
+    "p12", "pdf", "pem", "png", "svg", "tif", "tiff", "ttf", "txt", "webp", "woff", "woff2", "xml",
 ];
 
 fn root() -> PathBuf {
