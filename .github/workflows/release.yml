@@ -129,9 +129,80 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
+  # The experimental C library (crates/fagus-ffi, docs/ffi.md, ADR 8): per platform an archive
+  # with the shared library, fagus.h and the licenses, with an SBOM and attestations as the
+  # binaries. Not for musl, whose static targets build no shared library.
+  library:
+    name: library ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: x86_64-unknown-linux-gnu, os: ubuntu-latest, zig: x86_64-unknown-linux-gnu.2.17, files: libfagus_ffi.so }
+          - { target: aarch64-unknown-linux-gnu, os: ubuntu-latest, zig: aarch64-unknown-linux-gnu.2.17, files: libfagus_ffi.so }
+          - { target: x86_64-apple-darwin, os: macos-latest, files: libfagus_ffi.dylib }
+          - { target: aarch64-apple-darwin, os: macos-latest, files: libfagus_ffi.dylib }
+          - { target: x86_64-pc-windows-msvc, os: windows-latest, files: fagus_ffi.dll fagus_ffi.dll.lib }
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      NAME: fagus-ffi-${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the version
+        run: |
+          grep -q "^version = \"$VERSION\"$" Cargo.toml || { echo "Cargo.toml is not at version $VERSION"; exit 1; }
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.99.1
+          targets: ${{ matrix.target }}
+          components: clippy, rustfmt
+      - name: Build with zig
+        if: matrix.zig
+        run: |
+          pip install ziglang==0.16.0
+          cargo install --locked cargo-zigbuild@0.23.4
+          cargo zigbuild --release --locked -p fagus-ffi --target ${{ matrix.zig }}
+      - name: Build
+        if: ${{ !matrix.zig }}
+        run: cargo build --release --locked -p fagus-ffi --target ${{ matrix.target }}
+      - name: Pack
+        run: |
+          mkdir -p "dist" "$NAME"
+          for file in ${{ matrix.files }}; do cp "target/${{ matrix.target }}/release/$file" "$NAME/"; done
+          cp crates/fagus-ffi/include/fagus.h LICENSE-MIT LICENSE-APACHE THIRD-PARTY-NOTICES "$NAME/"
+          tar -czf "dist/$NAME.tar.gz" "$NAME"
+      # A C program built against the header renders a document, where the runner can run it.
+      - name: Run
+        if: matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'aarch64-apple-darwin'
+        run: |
+          cc -o render crates/fagus-ffi/tests/render.c -I "$NAME" -L "$NAME" -lfagus_ffi "-Wl,-rpath,$PWD/$NAME"
+          ./render probe.pdf
+          test "$(head -c 5 probe.pdf)" = "%PDF-"
+      - name: SBOM
+        run: |
+          cargo install --locked cargo-cyclonedx@0.5.10
+          cargo cyclonedx --manifest-path crates/fagus-ffi/Cargo.toml --format json --all \
+            --target "${{ matrix.target }}" --spec-version 1.5 --override-filename "$NAME.cdx"
+          mv "crates/fagus-ffi/$NAME.cdx.json" dist/
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/${{ env.NAME }}*
+      - uses: actions/attest-sbom@v2
+        with:
+          subject-path: dist/${{ env.NAME }}.tar.gz
+          sbom-path: dist/${{ env.NAME }}.cdx.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.NAME }}
+          path: dist/*
+          if-no-files-found: error
+
   release:
     name: Draft release
-    needs: build
+    needs: [build, library]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -160,4 +231,4 @@ jobs:
             --draft \
             --target "$GITHUB_SHA" \
             --title "Fagus $VERSION" \
-            --notes "Binaries built from $GITHUB_SHA, with a CycloneDX SBOM each (fagus-<target>.cdx.json). Check one with \`gh attestation verify fagus-<target> --repo $GITHUB_REPOSITORY\`. Pin them with tools/pin-binaries.php before publishing (docs/releasing.md)."
+            --notes "Binaries built from $GITHUB_SHA, with a CycloneDX SBOM each (fagus-<target>.cdx.json); the experimental C library in fagus-ffi-<target>.tar.gz (docs/ffi.md). Check one with \`gh attestation verify fagus-<target> --repo $GITHUB_REPOSITORY\`. Pin them with tools/pin-binaries.php before publishing (docs/releasing.md)."
