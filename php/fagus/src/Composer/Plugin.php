@@ -6,10 +6,12 @@ namespace Fagus\Composer;
 
 use Composer\Composer;
 use Composer\EventDispatcher\EventSubscriberInterface;
+use Composer\EventDispatcher\ScriptExecutionException;
 use Composer\IO\IOInterface;
 use Composer\Plugin\PluginInterface;
 use Composer\Script\ScriptEvents;
 use Fagus\Exception\FagusException;
+use Fagus\Exception\InstallException;
 use Fagus\Installer;
 use Fagus\Internal\Release;
 
@@ -18,6 +20,9 @@ use Fagus\Internal\Release;
  * package is all it takes. The binary is taken from Composer's cache when it was downloaded
  * before; Composer's GitHub token (`github-oauth`) opens a private fork. If the binary
  * cannot be installed, Composer goes on and says why: `vendor/bin/fagus-install` tries again.
+ * With `FAGUS_INSTALL_STRICT=1` in the environment, or `"extra": {"fagus": {"install-strict":
+ * true}}` in the root composer.json, Composer fails instead, so that a deployment stops there
+ * and not at the first PDF. `FAGUS_INSTALL_STRICT=0` turns the setting of composer.json off.
  *
  * @internal
  */
@@ -57,6 +62,10 @@ final class Plugin implements EventSubscriberInterface, PluginInterface
             return;
         }
         if (Release::BINARIES === []) {
+            $strict = $this->strict();
+            if ($strict !== null) {
+                $this->fail(InstallException::developmentVersion(Release::VERSION), $strict);
+            }
             $this->io->write('fagus: a development version, without binaries to install.', true, IOInterface::VERBOSE);
 
             return;
@@ -71,7 +80,40 @@ final class Plugin implements EventSubscriberInterface, PluginInterface
             ))->install($directory.'/php/fagus/bin');
             $this->io->write("fagus: the binary is installed at {$path}.", true, IOInterface::VERBOSE);
         } catch (FagusException $exception) {
+            $strict = $this->strict();
+            if ($strict !== null) {
+                $this->fail($exception, $strict);
+            }
             $this->io->writeError('<warning>fagus: '.$exception->getMessage().'</warning>');
         }
+    }
+
+    /**
+     * What makes a binary that cannot be installed fail Composer, if anything:
+     * `FAGUS_INSTALL_STRICT` in the environment (`0`, `false`, `no` or `off` turn it off), else
+     * `extra.fagus.install-strict` of the root package.
+     */
+    private function strict(): ?string
+    {
+        $value = getenv('FAGUS_INSTALL_STRICT');
+        if ($value !== false && trim($value) !== '') {
+            return in_array(strtolower(trim($value)), ['0', 'false', 'no', 'off'], true) ? null : 'FAGUS_INSTALL_STRICT';
+        }
+        $extra = $this->composer?->getPackage()->getExtra() ?? [];
+        $settings = is_array($extra['fagus'] ?? null) ? $extra['fagus'] : [];
+
+        return ($settings['install-strict'] ?? false) === true ? 'extra.fagus.install-strict' : null;
+    }
+
+    /**
+     * Ends Composer with an error that says why the binary was not installed, as a failing script
+     * does: the message, and the exit status 1.
+     */
+    private function fail(FagusException $exception, string $setting): never
+    {
+        $this->io?->writeError("<error>fagus: {$exception->getMessage()}</error>");
+        $this->io?->writeError("<error>fagus: Composer fails because {$setting} is set. `vendor/bin/fagus-install` tries again.</error>");
+
+        throw new ScriptExecutionException('fagus: the binary was not installed.', 1);
     }
 }
