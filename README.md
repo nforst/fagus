@@ -153,7 +153,7 @@ in [bench/README.md](bench/README.md#memory-and-cpu-time-memory).
 | Table of contents with page numbers (`target-counter()`) | ✓ | – | ✓ | – | –³ |
 | Table headers repeated on every page | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Hyphenation (`hyphens: auto`) | ✓ | ✓ | ✓ | – | ✓ |
-| Footnotes (`float: footnote`) | – | – | ✓ | – | – |
+| Footnotes (`float: footnote`) | ✓ | – | ✓ | – | – |
 | JavaScript | –⁴ | ✓ | – | – | – |
 | Bookmarks (PDF outline) | ✓ | with an option | ✓ | – | –³ |
 | Tagged PDF, PDF/UA | ✓ | tagged only | with an option | – | – |
