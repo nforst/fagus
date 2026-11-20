@@ -38,6 +38,9 @@ jobs:
           - { target: x86_64-apple-darwin, os: macos-latest }
           - { target: aarch64-apple-darwin, os: macos-latest }
           - { target: x86_64-pc-windows-msvc, os: windows-latest }
+          # FreeBSD has no runner: the binary is built natively in a FreeBSD VM on Linux, on the
+          # oldest major release FreeBSD supports, and renders a document there.
+          - { target: x86_64-unknown-freebsd, os: ubuntu-latest, freebsd: '14' }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -59,9 +62,31 @@ jobs:
           cargo install --locked cargo-zigbuild@0.23.4
           cargo zigbuild --release --locked -p fagus-cli --target ${{ matrix.zig }}
       - name: Build
-        if: ${{ !matrix.zig }}
+        if: ${{ !matrix.zig && !matrix.freebsd }}
         run: cargo build --release --locked -p fagus-cli --target ${{ matrix.target }}
+      # Built, collected and run in the VM; the files of dist/ come back to the runner, which makes
+      # the SBOM and the attestations as for the other targets. The rest of target/ stays there.
+      - name: Build and run in FreeBSD
+        if: matrix.freebsd
+        uses: vmactions/freebsd-vm@v1
+        with:
+          release: ${{ matrix.freebsd }}
+          prepare: |
+            fetch -o /tmp/rustup-init https://static.rust-lang.org/rustup/dist/x86_64-unknown-freebsd/rustup-init
+            chmod +x /tmp/rustup-init
+            /tmp/rustup-init -y --profile minimal --default-toolchain none
+          run: |
+            . "$HOME/.cargo/env"
+            freebsd-version
+            cargo build --release --locked -p fagus-cli --target ${{ matrix.target }}
+            mkdir dist
+            cp "target/${{ matrix.target }}/release/fagus" "dist/fagus-${{ matrix.target }}"
+            rm -rf target
+            echo '<h1>Fagus</h1>' > probe.html
+            "dist/fagus-${{ matrix.target }}" render probe.html -o probe.pdf
+            test "$(head -c 5 probe.pdf)" = "%PDF-"
       - name: Collect
+        if: ${{ !matrix.freebsd }}
         shell: bash
         run: |
           mkdir dist
@@ -70,9 +95,9 @@ jobs:
           else
             cp "target/${{ matrix.target }}/release/fagus" "dist/fagus-${{ matrix.target }}"
           fi
-      # The binaries that the runner can run render a document.
+      # The binaries that the runner can run render a document (FreeBSD's in its VM).
       - name: Run
-        if: ${{ !contains(matrix.target, 'aarch64-unknown-linux') && matrix.target != 'x86_64-apple-darwin' }}
+        if: ${{ !contains(matrix.target, 'aarch64-unknown-linux') && matrix.target != 'x86_64-apple-darwin' && !matrix.freebsd }}
         shell: bash
         run: |
           binary=$(ls dist/fagus-*)

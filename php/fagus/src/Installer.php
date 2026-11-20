@@ -76,11 +76,13 @@ final class Installer
 
     /**
      * The target of a platform, as Rust names it (`x86_64-unknown-linux-gnu`): by default the
-     * platform PHP runs on. Linux with musl, as in Alpine, has binaries of its own.
+     * platform PHP runs on. `$os` is a family of PHP_OS_FAMILY, or for the BSDs the name of the
+     * system (`FreeBSD`). Linux with musl, as in Alpine, has binaries of its own.
      */
     public static function target(?string $os = null, ?string $machine = null, ?bool $musl = null): string
     {
-        $os ??= PHP_OS_FAMILY;
+        // PHP_OS_FAMILY is "BSD" for FreeBSD, OpenBSD, NetBSD and DragonFly alike.
+        $os ??= PHP_OS_FAMILY === 'BSD' ? php_uname('s') : PHP_OS_FAMILY;
         $machine = strtolower($machine ?? php_uname('m'));
         $architecture = match ($machine) {
             'x86_64', 'amd64', 'x64' => 'x86_64',
@@ -94,6 +96,9 @@ final class Installer
             'Windows' => $architecture === 'x86_64'
                 ? 'x86_64-pc-windows-msvc'
                 : throw InstallException::unsupportedPlatform("Windows on {$machine}"),
+            'FreeBSD' => $architecture === 'x86_64'
+                ? 'x86_64-unknown-freebsd'
+                : throw InstallException::unsupportedPlatform("FreeBSD on {$machine}"),
             default => throw InstallException::unsupportedPlatform("{$os} on {$machine}"),
         };
     }

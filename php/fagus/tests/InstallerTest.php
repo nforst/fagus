@@ -49,11 +49,34 @@ final class InstallerTest extends TestCase
         $this->assertSame('aarch64-apple-darwin', Installer::target('Darwin', 'arm64'));
         $this->assertSame('x86_64-apple-darwin', Installer::target('Darwin', 'x86_64'));
         $this->assertSame('x86_64-pc-windows-msvc', Installer::target('Windows', 'AMD64'));
+        // php_uname('m') says amd64 on FreeBSD.
+        $this->assertSame('x86_64-unknown-freebsd', Installer::target('FreeBSD', 'amd64'));
         $this->assertSame('fagus-x86_64-pc-windows-msvc.exe', Installer::asset('x86_64-pc-windows-msvc'));
         $this->assertSame('fagus-aarch64-apple-darwin', Installer::asset('aarch64-apple-darwin'));
+        $this->assertSame('fagus-x86_64-unknown-freebsd', Installer::asset('x86_64-unknown-freebsd'));
 
         $this->expectException(InstallException::class);
         Installer::target('Linux', 'riscv64', false);
+    }
+
+    #[Test]
+    public function it_names_the_platforms_without_binaries(): void
+    {
+        $platforms = [
+            'FreeBSD on arm64' => ['FreeBSD', 'arm64'],
+            'OpenBSD on amd64' => ['OpenBSD', 'amd64'],
+            'NetBSD on amd64' => ['NetBSD', 'amd64'],
+            'BSD on amd64' => ['BSD', 'amd64'],
+            'Windows on arm64' => ['Windows', 'ARM64'],
+        ];
+        foreach ($platforms as $name => [$os, $machine]) {
+            try {
+                Installer::target($os, $machine);
+                $this->fail("a target for {$name}");
+            } catch (InstallException $exception) {
+                $this->assertStringStartsWith("There is no fagus binary for {$name}. ", $exception->getMessage());
+            }
+        }
     }
 
     #[Test]
@@ -69,6 +92,7 @@ final class InstallerTest extends TestCase
         $platforms = [
             ['Linux', 'x86_64', false], ['Linux', 'aarch64', false], ['Linux', 'x86_64', true], ['Linux', 'aarch64', true],
             ['Darwin', 'x86_64', null], ['Darwin', 'arm64', null], ['Windows', 'AMD64', null],
+            ['FreeBSD', 'amd64', null],
         ];
         $targets = array_map(static fn (array $platform): string => Installer::target(...$platform), $platforms);
         sort($targets);
