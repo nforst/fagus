@@ -11,6 +11,10 @@ All notable changes to this project are documented in this file. The format is b
 
 - `Pdf::inline()` and `Pdf::download()` send a PDF to the browser in one call: `Content-Type`, `Content-Disposition` (`inline` or `attachment`, with the file name and a `filename*` for names that are not ASCII), `Content-Length` and the PDF. `Document::inline()` and `Document::download()` render and send it, as `save()` renders and writes it: `Fagus::html($html)->inline('invoice.pdf')`. They throw a `FagusException` if output was already sent. Before, plain PHP needed the headers by hand and `echo $pdf->bytes()`; Laravel's `inline()` and `download()` responses stay as they are.
 
+### Fixed
+
+- On FreeBSD, a worker that had hardly run yet reported a peak resident memory (`maxRss`) of 0; it now leaves the size out until the system knows it, as on platforms without one.
+
 ## [1.0.0] - 2026-11-20
 
 The first stable release: from now on, only a major release changes the API ([stability](docs/stability.md)). [UPGRADING.md](UPGRADING.md) lists what an update from 0.x can need.

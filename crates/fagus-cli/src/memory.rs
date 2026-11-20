@@ -30,6 +30,9 @@ pub(crate) fn resident() -> Resident {
             peak: getrusage(UsageWho::RUSAGE_SELF)
                 .ok()
                 .and_then(|usage| u64::try_from(usage.max_rss()).ok())
+                // FreeBSD samples it at the clock ticks the process runs on, so a process that
+                // has hardly run yet reads 0: not known yet rather than empty.
+                .filter(|&size| size > 0)
                 .map(|size| size * unit),
         }
     }
@@ -115,7 +118,13 @@ mod tests {
 
     #[test]
     fn knows_its_own_memory_where_the_system_tells_it() {
-        let resident = resident();
+        // Run for a few clock ticks first, after which FreeBSD knows the peak (see above).
+        let start = std::time::Instant::now();
+        let mut resident = resident();
+        while resident.peak.is_none() && start.elapsed() < std::time::Duration::from_secs(2) {
+            std::hint::black_box((0..100_000_u64).sum::<u64>());
+            resident = self::resident();
+        }
         if cfg!(any(
             target_os = "linux",
             target_os = "macos",

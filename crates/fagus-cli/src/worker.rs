@@ -325,17 +325,14 @@ mod tests {
         assert_eq!(frames[2].header["id"], 7);
         assert_eq!(frames[2].header["pages"], 1);
         assert!(frames[2].blobs[0].starts_with(b"%PDF-"));
-        // The worker's memory, where the system tells it.
-        if cfg!(any(
-            target_os = "linux",
-            target_os = "macos",
-            target_os = "freebsd"
-        )) {
-            assert!(
-                frames[2].header["maxRss"]
-                    .as_u64()
-                    .is_some_and(|bytes| bytes > 1 << 20)
-            );
+        // The worker's memory, where the system tells it; FreeBSD knows it only once the
+        // process has run for a clock tick (memory.rs).
+        let max_rss = frames[2].header.get("maxRss");
+        if cfg!(any(target_os = "linux", target_os = "macos")) {
+            assert!(max_rss.is_some());
+        }
+        if let Some(bytes) = max_rss {
+            assert!(bytes.as_u64().is_some_and(|bytes| bytes > 1 << 20), "{bytes}");
         }
         assert_eq!(frames[2].header.get("rss").is_some(), cfg!(target_os = "linux"));
         assert!(
@@ -551,15 +548,13 @@ mod tests {
         assert_eq!(frames[1].header["id"], 4);
         assert_eq!(frames[1].header["diagnostics"][0]["code"], "css.unknown-property");
         assert_eq!(frames[1].header["diagnostics"][0]["severity"], "warning");
-        // The worker's memory comes with failures too, where the system tells it.
-        assert_eq!(
-            frames[1].header.get("maxRss").is_some(),
-            cfg!(any(
-                target_os = "linux",
-                target_os = "macos",
-                target_os = "freebsd"
-            ))
-        );
+        // The worker's memory comes with failures too, where the system tells it (on FreeBSD
+        // once the process has run for a clock tick).
+        if cfg!(any(target_os = "linux", target_os = "macos")) {
+            assert!(frames[1].header.get("maxRss").is_some());
+        } else if !cfg!(target_os = "freebsd") {
+            assert!(frames[1].header.get("maxRss").is_none());
+        }
     }
 
     #[test]
