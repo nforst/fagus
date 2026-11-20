@@ -153,6 +153,38 @@ On Linux, where Fagus runs in production, glibc's allocator also keeps freed mem
 
 Without the trim, what the worker keeps after 20 large documents varied between runs (79 and 125 MB); with it, the worker keeps about as much as a new one. The time includes the trim after the document before and does not differ beyond the noise. Fixing glibc's thresholds instead (`MALLOC_TRIM_THRESHOLD_=131072`, `MALLOC_MMAP_THRESHOLD_=131072`, which keep glibc from raising them after large blocks are freed) did not help: 63 MB after the first 100-page invoice and 124 MB after 20 more. With musl (the static binaries for Alpine, built and run in Alpine), the worker keeps next to nothing without any call, 14 to 21 MB RSS after 20 large documents, but renders the 100-page invoice in 238 ms instead of 180.
 
+## The worker and the C library
+
+What the worker process costs PHP against the experimental C library ([docs/ffi.md](../docs/ffi.md), [ADR 8](../docs/adr/0008-c-library-experimental.md)), with the scripts in `ffi/`: the modern invoices of `tools/gen.py` with 3, 150 and 1,680 lines (1, 10 and 100 pages) rendered by `fagus render --repeat` (Rust, one warm engine), from PHP through the package and its worker, and from PHP through the library and PHP's FFI with the request the package sends. Warm is the median of 200, 50 or 10 renders after one; "new" a new engine and its first document, timed together as each PHP-FPM request pays it (the median of 30, 15 or 5). Each in a process of its own, in seven rounds with the order turned every other round; the medians of the rounds.
+
+```sh
+cargo build --release -p fagus-cli -p fagus-ffi && composer install   # in the repository
+cd bench/ffi
+python3 run.py times             # render times
+python3 run.py memory            # memory of PHP and the worker, 100 pages (PAGES=1 for 1 page; macOS)
+```
+
+Results of 2026-11-20 on an Apple M2 Pro, macOS 27, PHP 8.5, the binary of commit 21ac2c0 and the library as it was added after it, with other builds on the machine at a load average of 3.8 to 4.7, in milliseconds:
+
+| Invoice | Rust, in-process | PHP, worker | PHP, library | New worker and its first document | New library engine and its first document |
+|---|--:|--:|--:|--:|--:|
+| 1 page | 3.08 | 3.12 | 3.12 | 11.13 | 5.73 |
+| 10 pages | 20.61 | 20.95 | 21.60 | 31.97 | 26.28 |
+| 100 pages | 212.75 | 214.12 | 225.21 | 233.90 | 239.05 |
+
+- The worker costs PHP 0.04, 0.34 and 1.37 ms more than the same render in Rust (1.3, 1.6 and 0.6 %): the pipe, the frames and the copies of the request and the PDF both ways. That is the most a library can save on a warm engine.
+- The library did not save it: from PHP it was as fast at 1 page and 3 and 5 % slower at 10 and 100 pages, in every round. Called from a small C program, it rendered the 100-page invoice within the noise of `fagus render` (218 to 226 ms against 210 to 225 ms, three runs each), so the difference lies in rendering inside the PHP process, not in the library; it was not looked into further.
+- What the library saves is the start of the worker: 5.4 ms at 1 page and 5.7 ms at 10 pages for each new engine, which PHP-FPM pays in each request that renders. Loading the declarations with `FFI::cdef()` in each request, as without preloading, added nothing measurable once the library was loaded.
+
+Memory, 21 renders of one invoice by one engine (`run.py memory`, five rounds, medians): the peak physical footprint, and the resident size after the renders in parentheses, in MB.
+
+| Invoice | PHP, with the worker | The worker | Together | PHP with the library |
+|---|--:|--:|--:|--:|
+| 1 page | 12.4 (27.8) | 10.3 (21.5) | 22.7 (49.5) | 19.9 (45.8) |
+| 100 pages | 14.6 (30.0) | 118.2 (174.3) | 132.8 (204.3) | 126.3 (194.9) |
+
+One process instead of two saves 3 to 7 MB of footprint (4 to 9 MB RSS), about what a second process costs on its own. What the engine needs moves into PHP's process, and stays there: on macOS the allocator keeps what the large documents freed ([above](#memory-a-worker-keeps)) in the PHP process instead of in a worker that the package can replace.
+
 ## Fagus
 
 ```sh
