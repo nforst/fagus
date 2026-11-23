@@ -829,6 +829,11 @@ pub struct Layouter<'a> {
     /// `widows` ask for, or inside the items of a grid row that avoid breaks inside where the
     /// break before the row is avoided too.
     pub(crate) poor_lines: std::cell::Cell<bool>,
+    /// Whether the block laid out next breaks inside boxes that avoid breaks inside, as it does
+    /// where every break before it on the page is avoided too and it does not fit otherwise:
+    /// both breaks violate an `avoid`, and the later one is taken, as in Chrome (Blink ranks
+    /// both `kBreakAppealViolatingBreakAvoid` and takes the latest break of the best appeal).
+    pub(crate) breaks_avoided_inside: std::cell::Cell<bool>,
     /// The width of the containing block of each table where it starts.
     pub(crate) table_widths: RefCell<FxHashMap<BoxId, Au>>,
     /// Whether the header and the footer of each table repeat, as decided where the table
@@ -1030,6 +1035,7 @@ impl<'a> Layouter<'a> {
             multicol_container: std::cell::Cell::new(None),
             breaks_avoided_items: std::cell::Cell::new(false),
             poor_lines: std::cell::Cell::new(false),
+            breaks_avoided_inside: std::cell::Cell::new(false),
             table_repeats: RefCell::default(),
             table_widths: RefCell::default(),
             line_budget: std::cell::Cell::new(None),
@@ -1276,6 +1282,9 @@ impl<'a> Layouter<'a> {
     /// column, as in Blink, whose content is fragmented into columns there, not pages).
     pub(crate) fn avoids_breaks_inside(&self, value: fagus_style::values::BreakInside) -> bool {
         use fagus_style::values::BreakInside;
+        if self.breaks_avoided_inside.get() {
+            return false;
+        }
         match value {
             BreakInside::Avoid => true,
             BreakInside::AvoidPage => self.columns.get() == 0,
@@ -2614,7 +2623,16 @@ impl<'a> Layouter<'a> {
                         {
                             self.truncate_floats(count);
                             let outer = self.poor_lines.replace(true);
-                            let retried = self.block_level(child, child_space, child_token);
+                            let mut retried = self.block_level(child, child_space, child_token);
+                            // Or, where that does not place it either, a break inside the boxes
+                            // in it that avoid breaks inside, which is as poor as the break
+                            // before it and later (see `Layouter::breaks_avoided_inside`).
+                            if retried.is_none() {
+                                self.truncate_floats(count);
+                                let inside = self.breaks_avoided_inside.replace(true);
+                                retried = self.block_level(child, child_space, child_token);
+                                self.breaks_avoided_inside.set(inside);
+                            }
                             self.poor_lines.set(outer);
                             retried
                         }

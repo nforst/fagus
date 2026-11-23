@@ -314,3 +314,67 @@ fn breaks_inside_the_list_before_a_box_that_avoids_the_break_before_it() {
     assert_eq!(place(&pages, "item 5").map(|(page, ..)| page), Some(0));
     assert_eq!(place(&pages, "subtotal").map(|(page, ..)| page), Some(1));
 }
+
+#[test]
+fn breaks_inside_a_box_that_avoids_it_after_a_heading_at_the_top_of_the_page() {
+    // The heading avoids the break after it and starts the page: breaking inside the box that
+    // avoids breaks inside is as poor as breaking after the heading, and later, so the box
+    // breaks with the heading above it, as in Chrome (nforst/fagus#5).
+    let lines = |prefix: &str, count: usize| {
+        (1..=count)
+            .map(|line| format!("{prefix}{line}<br>"))
+            .collect::<Vec<_>>()
+            .concat()
+    };
+    let head = "<p style='break-after: avoid'>Head</p>";
+    let pages = render(
+        "",
+        &format!("{head}<div style='break-inside: avoid'>{}</div>", lines("l", 20)),
+    );
+    assert_eq!(
+        place(&pages, "Head").map(|(page, _, y)| (page, y)),
+        Some((0, 0.0))
+    );
+    assert_eq!(
+        place(&pages, "l14").map(|(page, _, y)| (page, y)),
+        Some((0, 280.0))
+    );
+    assert_eq!(place(&pages, "l15").map(|(page, _, y)| (page, y)), Some((1, 0.0)));
+    // Also where the box alone would fit on the next page (with `widows` at 2).
+    let pages = render(
+        "",
+        &format!("{head}<div style='break-inside: avoid'>{}</div>", lines("l", 15)),
+    );
+    assert_eq!(
+        place(&pages, "l13").map(|(page, _, y)| (page, y)),
+        Some((0, 260.0))
+    );
+    assert_eq!(place(&pages, "l14").map(|(page, _, y)| (page, y)), Some((1, 0.0)));
+    // And inside a row group of a table that avoids breaks inside.
+    let rows = ["a", "b", "c", "d"]
+        .map(|row| format!("<tr><td>{}</td></tr>", lines(row, 4)))
+        .concat();
+    let pages = render(
+        "td { padding: 0 } table { border-spacing: 0 }",
+        &format!("{head}<table><tbody style='break-inside: avoid'>{rows}</tbody></table>"),
+    );
+    assert_eq!(
+        place(&pages, "d2").map(|(page, _, y)| (page, y)),
+        Some((0, 280.0))
+    );
+    assert_eq!(place(&pages, "d3").map(|(page, _, y)| (page, y)), Some((1, 0.0)));
+    // Where content before the heading leaves a break that nothing avoids, the heading moves
+    // on with the box, which breaks on the next page.
+    let pages = render(
+        "",
+        &format!(
+            "<p>before</p>{head}<div style='break-inside: avoid'>{}</div>",
+            lines("l", 20)
+        ),
+    );
+    assert_eq!(
+        place(&pages, "Head").map(|(page, _, y)| (page, y)),
+        Some((1, 0.0))
+    );
+    assert_eq!(place(&pages, "l15").map(|(page, _, y)| (page, y)), Some((2, 0.0)));
+}

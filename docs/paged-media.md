@@ -533,7 +533,10 @@ subtotal per page (see [Extensions](extensions.md)).
 **Keep headings with their text.** Headings do not stay with what follows them by themselves.
 `h1, h2, h3 { break-after: avoid; }` moves a heading that would end a page to the next page together
 with the start of its paragraph. A `break-before` of a first child and a `break-after` of a last
-child pass on to the parent, since breaks fall between siblings.
+child pass on to the parent, since breaks fall between siblings. Where a heading that avoids the break after it
+starts a page and the box after it avoids breaks inside but does not fit below it, the box breaks
+inside, below the heading, as in Chrome: either break goes against an `avoid`, and the later one is
+taken.
 
 Fagus breaks pages where Chrome breaks them, including inside table rows, flex and grid items,
 floats and positioned boxes, so a template that paginates well in Chrome's print preview paginates

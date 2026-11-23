@@ -8,6 +8,7 @@ All notable changes to this project are documented in this file. The format is b
 ### Fixed
 
 - `@supports (position: running(x))` is true, as running elements work; it was false, so a stylesheet could not lay them out only where they are supported ([#4](https://github.com/nforst/fagus/issues/4)).
+- A box with `break-inside: avoid` that does not fit after a heading with `break-after: avoid` at the top of a page breaks inside, below the heading, as in Chrome: both breaks violate an `avoid`, and the later one wins. Fagus broke after the heading instead and left it alone on its page, also where the box was taller than a page and broke on the next one all the same ([#5](https://github.com/nforst/fagus/issues/5)).
 
 ## [1.1.0] - 2026-11-20
 

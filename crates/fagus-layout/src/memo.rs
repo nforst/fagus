@@ -206,6 +206,7 @@ struct State {
     shortage_taken: bool,
     breaks_avoided_items: bool,
     poor_lines: bool,
+    breaks_avoided_inside: bool,
     line_budget: Option<usize>,
     clamp_follows: bool,
     margin_above: Au,
@@ -614,6 +615,7 @@ impl Layouter<'_> {
             shortage_taken: self.shortage_taken.get() > 0,
             breaks_avoided_items: self.breaks_avoided_items.get(),
             poor_lines: self.poor_lines.get(),
+            breaks_avoided_inside: self.breaks_avoided_inside.get(),
             line_budget: self.line_budget.get(),
             clamp_follows: self.clamp_follows.get(),
             margin_above: self.margin_above.get(),
@@ -660,6 +662,7 @@ impl Layouter<'_> {
         self.space_shortage.set(state.space_shortage);
         self.breaks_avoided_items.set(state.breaks_avoided_items);
         self.poor_lines.set(state.poor_lines);
+        self.breaks_avoided_inside.set(state.breaks_avoided_inside);
         self.line_budget.set(state.line_budget);
         self.clamp_follows.set(state.clamp_follows);
         self.margin_above.set(state.margin_above);
