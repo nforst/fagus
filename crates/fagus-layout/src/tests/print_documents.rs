@@ -221,9 +221,10 @@ fn balances_columns_to_the_end_of_the_content_of_the_tallest() {
 }
 
 #[test]
-fn keeps_running_elements_in_the_flow_where_chrome_does() {
-    // Chrome knows no `running()`: where `@supports` asks for it, or a later declaration wins,
-    // the element stays in the flow in Chrome, and so it does here.
+fn keeps_running_elements_in_the_flow_where_a_later_declaration_wins() {
+    // Where a later declaration wins, the element stays in the flow, as in Chrome, which knows
+    // no `running()`. `@supports` answers for Fagus, which has running elements
+    // (nforst/fagus#4): there the element goes into the page margin.
     let in_flow = |css: &str| {
         let (_, pages) = render_document(&format!(
             "<style>@page {{ @bottom-center {{ content: element(foot) }} }} body {{ font: 12px Inter }}
@@ -233,10 +234,13 @@ fn keeps_running_elements_in_the_flow_where_chrome_does() {
         runs(&pages[0].fragments[0], 0.0, &mut found);
         found.iter().any(|(_, run)| run.text.contains("FOOT"))
     };
-    assert!(in_flow(
+    assert!(!in_flow(
         "@supports (position: running(x)) { .foot { position: running(foot) } }"
     ));
-    assert!(in_flow(".foot { position: running(foot); position: relative }"));
+    assert!(in_flow(
+        "@supports not (position: running(x)) { .foot { position: relative } }
+         .foot { position: running(foot); position: relative }"
+    ));
     // Fagus' own support takes it out of the flow, into the page margin.
     assert!(!in_flow(".foot { position: running(foot) }"));
 }

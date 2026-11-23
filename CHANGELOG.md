@@ -5,6 +5,10 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Fixed
+
+- `@supports (position: running(x))` is true, as running elements work; it was false, so a stylesheet could not lay them out only where they are supported ([#4](https://github.com/nforst/fagus/issues/4)).
+
 ## [1.1.0] - 2026-11-20
 
 ### Added

@@ -731,6 +731,10 @@ fn supports_condition(condition: &SupportsCondition<'_>) -> bool {
                                 || crate::flow_position(&unparsed).is_some()
                                 || crate::is_calc_size(&unparsed)
                                 || crate::background_clip::is_border_area(&unparsed)
+                                || (matches!(
+                                    unparsed.property_id,
+                                    lightningcss::properties::PropertyId::Position
+                                ) && crate::paged::running_name(&unparsed.value).is_some())
                         }
                         Ok(
                             LightningProperty::Custom(_)
@@ -1040,6 +1044,13 @@ tr:has(input:checked) td { color: green }";
 @supports (hanging-punctuation: first allow-end last) { #x { color: green } }
 @supports (hanging-punctuation: force-end allow-end) { #x { color: blue } }";
         assert_eq!(winner(css, "<p id=x>", "x"), 2);
+        // Running elements are (CSS Generated Content for Paged Media 3), with one name.
+        let css = "#x { color: red }
+@supports (position: running(header)) and (position: RUNNING(x)) { #x { color: green } }
+@supports (position: running()) or (position: running(1)) or (position: running(a b)) or (position: running(a) fixed) { #x { color: blue } }";
+        assert_eq!(winner(css, "<p id=x>", "x"), 2);
+        assert!(supports("position: running(header)"));
+        assert!(!supports("display: running(header)"));
     }
 
     #[test]
