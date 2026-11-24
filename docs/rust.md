@@ -178,7 +178,8 @@ let document = Document::html(r#"<img src="storage://logo.svg" alt="Logo">"#)
 ```
 
 `load` gets the URL exactly as written in the document and returns the data or `None`; for a URL
-with a fragment (`icons.svg#check`) it gets one more call without the fragment if it returns `None`. The
+with a fragment (`icons.svg#check`) it gets one more call without the fragment if it returns `None`. It is
+called once for each URL in a render, whatever it returns. The
 loader must be `Send + Sync`: it is called from the engine's rendering thread. The documents of
 frames ask for their resources by their URLs resolved against the frame's URL.
 

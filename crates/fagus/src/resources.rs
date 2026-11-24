@@ -16,6 +16,7 @@ pub trait ResourceLoader: Send + Sync {
     /// their resources by their URLs resolved against the frame's URL, relative to the document
     /// (`sub/style.css` for `style.css` in `sub/page.html`). For a URL with a fragment
     /// (`icons.svg#check`), a loader that returns `None` is asked again without the fragment.
+    /// A render asks once for each URL, whatever the answer.
     fn load(&self, url: &str) -> Option<Vec<u8>>;
 }
 
@@ -125,13 +126,14 @@ pub(crate) fn file_inside(base: &Path, root: &Path, url: &str) -> Option<PathBuf
 
 /// The resources one render has loaded, each content once: what a document loads under many
 /// URLs (`logo.png?1`, `logo.png?2`, …, or the same bytes from the caller under several names)
-/// is held once, with one address, so that it is decoded and embedded once too, and each file
-/// is read once. The bytes are charged to the budget of the render (see
-/// [`fagus_dom::budget`]) once.
+/// is held once, with one address, so that it is decoded and embedded once too, each file is
+/// read once, and the caller's loader is asked once for each URL, whatever it answers. The bytes
+/// are charged to the budget of the render (see [`fagus_dom::budget`]) once.
 #[derive(Debug, Default)]
 pub(crate) struct Loaded {
     held: Mutex<Held>,
     files: Mutex<FxHashMap<PathBuf, Arc<Vec<u8>>>>,
+    asked: Mutex<FxHashMap<String, Option<Arc<Vec<u8>>>>>,
 }
 
 /// The data loaded, by its hash and length, and the addresses of the data held.
@@ -160,6 +162,22 @@ impl Loaded {
         drop(held);
         fagus_dom::budget::charge(fagus_dom::budget::Kind::Resources, data.len() as u64);
         data
+    }
+
+    /// What the caller's loader answered for `url`, asked with `ask` once in a render: a
+    /// document is laid out again for container queries and to shrink it to the page, and names
+    /// a URL in many places.
+    pub(crate) fn asked(&self, url: &str, ask: impl FnOnce() -> Option<Vec<u8>>) -> Option<Arc<Vec<u8>>> {
+        if let Some(answer) = self.asked.lock().unwrap_or_else(PoisonError::into_inner).get(url) {
+            return answer.clone();
+        }
+        // (Not while the answers are locked: the loader may take its time.)
+        let answer = ask().map(Arc::new);
+        self.asked
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(url.to_owned(), answer.clone());
+        answer
     }
 
     /// The data of `file`, read once.

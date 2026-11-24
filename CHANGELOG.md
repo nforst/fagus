@@ -10,6 +10,7 @@ All notable changes to this project are documented in this file. The format is b
 - The Composer plugin warns when it installs the binary for a development version of the package (a branch such as `dev-main`): a branch lists the binaries of the last release, so the binary is that release's and may not know what the branch added. The installation succeeds as before, also with `FAGUS_INSTALL_STRICT`; build the binary from the branch and set `FAGUS_BINARY` to use it.
 - The FreeBSD binary, built on FreeBSD 14, is now tested on FreeBSD 15 too: CI renders documents with it there, and the release workflow runs the release's binary on FreeBSD 15 before it drafts the release.
 - The workflows name their actions by commit instead of by tag, and Dependabot proposes their updates.
+- A resolver (in Rust a `ResourceLoader`) is asked once for each URL in a render, whatever it answers. Before, a document with container queries, or one wider than the page that is shrunk to fit, asked again for every image each time it was laid out: up to three or four times for each image, and each time the PHP callback ran and the data crossed the pipe. A resolver that counts its calls sees fewer of them; the PDF is the same.
 
 ### Fixed
 

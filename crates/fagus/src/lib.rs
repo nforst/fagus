@@ -1546,11 +1546,13 @@ impl Inner {
             return Some(Arc::clone(data));
         }
         if let Some(loader) = &input.loader
-            && let Some(data) = loader
-                .load(url)
-                .or_else(|| (resource != url).then(|| loader.load(resource)).flatten())
+            && let Some(data) = input.loaded.asked(url, || loader.load(url)).or_else(|| {
+                (resource != url)
+                    .then(|| input.loaded.asked(resource, || loader.load(resource)))
+                    .flatten()
+            })
         {
-            return Some(Arc::new(data));
+            return Some(data);
         }
         let base = input.base.as_deref()?;
         let root = input.root.as_deref().unwrap_or(base);
@@ -5387,6 +5389,47 @@ mod tests {
             *sprite.0.lock().expect("not poisoned"),
             ["sprite.svg#a", "sprite.svg"]
         );
+    }
+
+    #[test]
+    fn asks_a_loader_once_for_each_url_in_a_render() {
+        // A document with container queries is styled and laid out twice, one wider than the
+        // page again to shrink it, and each time its images are collected: the loader is asked
+        // for each URL once all the same, also for one it does not have.
+        struct Counting(Mutex<Vec<String>>);
+        impl ResourceLoader for Counting {
+            fn load(&self, url: &str) -> Option<Vec<u8>> {
+                self.0.lock().expect("not poisoned").push(url.to_owned());
+                (url != "missing.png").then(|| resources::data_url(PNG).expect("a PNG"))
+            }
+        }
+        let asked = |html: &str| {
+            let loader = Arc::new(Counting(Mutex::default()));
+            let output = engine()
+                .render(&Document::html(html).loader(Arc::clone(&loader) as Arc<dyn ResourceLoader>))
+                .expect("rendered");
+            assert_eq!(codes(&output), ["resource.not-loaded"]);
+            loader.0.lock().expect("not poisoned").clone()
+        };
+        let images = "<img src='logo.png' alt=''><img src='missing.png' alt=''>\
+                      <p style='background: url(paper.png)'>Text</p>";
+        let expected = ["logo.png", "missing.png", "paper.png"];
+        assert_eq!(asked(images), expected);
+        let containers = format!(
+            "<style>.card {{ container-type: inline-size }} \
+             @container (min-width: 100px) {{ p {{ color: red }} }}</style>\
+             <div class='card'>{images}</div>"
+        );
+        assert_eq!(asked(&containers), expected);
+        let wide = format!("{containers}<div style='width: 1000px'>wider than the page</div>");
+        assert_eq!(asked(&wide), expected);
+        // An image that only the second layout names is asked for then.
+        let late = format!(
+            "<style>.card {{ container-type: inline-size }} \
+             @container (min-width: 100px) {{ span {{ background: url(late.png) }} }}</style>\
+             <div class='card'>{images}<span>late</span></div>"
+        );
+        assert_eq!(asked(&late), ["logo.png", "missing.png", "paper.png", "late.png"]);
     }
 
     #[test]

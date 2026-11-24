@@ -95,7 +95,7 @@ The header of `R`; fields other than `id` and `html` may be left out:
   diagnostics name.
 - `ask`: whether the worker asks for resources it does not have (`false` if left out). A resource
   is looked for as a `data:` URL, in `resources`, by asking the caller, then as a file, in that
-  order.
+  order. The worker asks once for each URL in a render.
 - `conformance`: `1b`, `2b`, `2u`, `2a`, `3b`, `3u`, `3a`, `4`, `4e` or `4f` for PDF/A (see
   [pdf.md](pdf.md#write-pdfa)).
 - `tagged`: whether the PDF is tagged, with the logical structure of the document (`true` if

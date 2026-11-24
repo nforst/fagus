@@ -159,7 +159,8 @@ URLs in stylesheets are resolved against the stylesheet first: `url(img/bg.png)`
 Sets a callback that answers requests for resources that are not handed over with `resource()`.
 It gets the URL (resolved as described for `resource()`) and returns the data, or `null` when it
 does not have it. Fagus asks the callback before it looks for a file inside the root; after
-`null`, it tries the file. The engine waits while the callback runs.
+`null`, it tries the file. It is asked once for each URL in a render. The engine waits while the
+callback runs.
 
 ```php
 Fagus::html($html)->resolver(function (string $url): ?string {

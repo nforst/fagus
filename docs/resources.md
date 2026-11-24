@@ -125,6 +125,9 @@ including `https://…` URLs. It decides what to hand out. Fagus does not go to 
 your resolver may, under your own rules: check the host against a list, set a timeout, and keep
 in mind that a document from user input can name any URL.
 
+The resolver is asked once for each URL in a render, whatever it answers, however often the
+document names the URL.
+
 The engine waits while the callback runs; the [timeout](deployment.md#timeouts) does not count
 that time, as it limits the wait for the worker's answers.
 
