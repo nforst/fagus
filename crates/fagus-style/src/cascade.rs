@@ -2685,6 +2685,10 @@ fn build_style(
             None => style.font_size * 16.0 / 13.0,
         };
     }
+    // No font is larger than Blink's largest (`kMaximumAllowedFontSize`), zoomed: `em` and the
+    // sizes inherited follow the size cut to it, and no size is infinite (`zoom` times a large
+    // `font-size`), which text could not be set at.
+    style.font_size = style.font_size.min(MAX_FONT_SIZE);
     context.font_size = style.font_size;
     if is_root {
         context.root_font_size = style.font_size / style.zoom;
@@ -3014,6 +3018,9 @@ fn may_set_content(rules: &[fagus_css::MatchedRule<'_>]) -> bool {
             })
     })
 }
+
+/// The largest font size, in pixels, as in Chrome: a larger one is cut to it.
+const MAX_FONT_SIZE: f32 = 10_000.0;
 
 /// The properties that select an element's fonts.
 const FONT_SELECTION: [PropertyId<'static>; 4] = [

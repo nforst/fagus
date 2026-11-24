@@ -48,6 +48,39 @@ fn renders_text_at_absurd_font_sizes() {
 }
 
 #[test]
+fn cuts_the_font_size_to_the_largest_of_chrome() {
+    // Found by the layout invariants: `zoom` times a large `font-size` was infinite, and the
+    // glyphs of its text were placed at offsets that are no numbers. Chrome sets no text larger
+    // than 10,000 pixels, zoomed, and `em` follows the size cut to that.
+    let pages = |content: &str| {
+        let html = format!(
+            "<style>@page {{ size: 1000px 1000px; margin: 0 }} body {{ margin: 0 }} \
+             p {{ margin: 0; line-height: 1 }}</style>{content}"
+        );
+        Engine::new()
+            .render(&Document::html(html))
+            .expect("rendered")
+            .pages
+    };
+    let largest = pages("<p style='font-size: 10000px'>x</p>");
+    assert!(largest < 20, "{largest} pages");
+    assert_eq!(pages("<p style='font-size: 1e9px'>x</p>"), largest);
+    assert_eq!(
+        pages("<div style='zoom: 4'><p style='font-size: 9000px'>x</p></div>"),
+        largest
+    );
+    assert_eq!(
+        pages("<div style='zoom: 1e30'><p style='font-size: 1e30px'>x</p></div>"),
+        largest
+    );
+    let em = pages("<div style='font-size: 10000px'><p style='height: 1em'></p></div>");
+    assert_eq!(
+        pages("<div style='font-size: 1e9px'><p style='height: 1em'></p></div>"),
+        em
+    );
+}
+
+#[test]
 fn renders_clip_shapes_too_large_to_draw() {
     // The clip was left out but its end was not, which krilla could not pop.
     renders("<div style='clip-path: circle(1e30px)'>x</div>");
