@@ -11,9 +11,12 @@ use Fagus\Internal\Release;
 use Fagus\Laravel\Facades\Fagus;
 use Fagus\Laravel\PdfFactory;
 use Fagus\Laravel\PendingPdf;
+use Fagus\PageLayout;
+use Fagus\PageMode;
 use Fagus\Permission;
 use Fagus\Signature;
 use Fagus\Tests\Fixtures\FakeWorker;
+use Fagus\Zoom;
 use Illuminate\Http\Client\Pool;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Cache;
@@ -237,6 +240,17 @@ final class FagusTest extends TestCase
         $this->assertMatchesRegularExpression('~/Filter/Standard/V 5/R 6/.*/P -1340/~', $bytes);
         $this->assertStringNotContainsString('Gehalt', $bytes, 'the metadata is encrypted too');
         $this->assertSame(['userPassword' => 'user', 'permissions' => ['print']], $pdf->document()->request(1)[0]['encryption']);
+    }
+
+    #[Test]
+    public function it_chooses_how_the_pdf_opens(): void
+    {
+        $pdf = Fagus::html('<p>Handbuch</p>')->initialView(PageMode::Thumbnails, PageLayout::OneColumn, Zoom::FitPage, 1, centerWindow: true);
+        $this->assertSame(
+            ['pageMode' => 'thumbnails', 'pageLayout' => 'one-column', 'zoom' => 'fit-page', 'page' => 1, 'centerWindow' => true],
+            $pdf->document()->request(1)[0]['view'],
+        );
+        $this->assertStringContainsString('/PageMode/UseThumbs', self::decoded($pdf->render()->bytes()));
     }
 
     #[Test]

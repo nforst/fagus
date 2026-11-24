@@ -32,6 +32,16 @@ final class InvalidArgumentException extends FagusException
         return new self('Encryption needs a user password or an owner password.');
     }
 
+    public static function invalidZoom(float $zoom): self
+    {
+        return new self("The zoom must be a number of percent above 0, Zoom::FitPage or Zoom::FitWidth, not {$zoom}.");
+    }
+
+    public static function invalidPage(int $page): self
+    {
+        return new self("The page to open at must be at least 1, not {$page}.");
+    }
+
     public static function notPositive(string $name, int $value): self
     {
         return new self("The engine's {$name} must be at least 1 or null, not {$value}.");

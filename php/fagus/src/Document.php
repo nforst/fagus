@@ -74,6 +74,9 @@ final class Document
     /** @var array{userPassword: ?string, ownerPassword: ?string, permissions: ?list<Permission>}|null */
     private ?array $encryption = null;
 
+    /** @var array{pageMode?: string, pageLayout?: string, zoom?: string|float, page?: int, fitWindow?: true, centerWindow?: true}|null */
+    private ?array $view = null;
+
     private function __construct(
         private readonly string $html,
         private readonly bool $xhtml = false,
@@ -360,6 +363,45 @@ final class Document
     }
 
     /**
+     * How a viewer shows the PDF when it opens it: what it shows beside the pages, how it lays
+     * the pages out, the zoom ({@see Zoom}, or a number of percent, 100 for the actual size),
+     * the page it opens at (from 1), and whether it sizes its window to the page and centers it
+     * on the screen. What is left out is up to the viewer. Viewers follow these wishes to
+     * different degrees: browsers ignore most of them. PDF/A-1b lacks the page modes
+     * {@see PageMode::Attachments} and {@see PageMode::Layers} and the page layouts
+     * {@see PageLayout::TwoPageLeft} and {@see PageLayout::TwoPageRight}; those, and a page the
+     * document does not have, are left out with a `pdf.view-ignored` warning.
+     *
+     * @throws InvalidArgumentException for a zoom that is not above 0, or a page below 1
+     */
+    public function initialView(
+        ?PageMode $pageMode = null,
+        ?PageLayout $pageLayout = null,
+        Zoom|float|null $zoom = null,
+        ?int $page = null,
+        bool $fitWindow = false,
+        bool $centerWindow = false,
+    ): self {
+        if (is_float($zoom) && ! ($zoom > 0 && is_finite($zoom))) {
+            throw InvalidArgumentException::invalidZoom($zoom);
+        }
+        if ($page !== null && $page < 1) {
+            throw InvalidArgumentException::invalidPage($page);
+        }
+        $copy = clone $this;
+        $copy->view = array_filter([
+            'pageMode' => $pageMode?->value,
+            'pageLayout' => $pageLayout?->value,
+            'zoom' => $zoom instanceof Zoom ? $zoom->value : $zoom,
+            'page' => $page,
+            'fitWindow' => $fitWindow ?: null,
+            'centerWindow' => $centerWindow ?: null,
+        ], static fn (mixed $value): bool => $value !== null);
+
+        return $copy;
+    }
+
+    /**
      * The creation date written into the PDF (now by default). A fixed date makes the output
      * reproducible.
      */
@@ -530,6 +572,9 @@ final class Document
                     $this->encryption['permissions'],
                 ),
             ], static fn (mixed $value): bool => $value !== null);
+        }
+        if ($this->view !== null && $this->view !== []) {
+            $header['view'] = $this->view;
         }
         if ($this->created !== null) {
             $header['created'] = DateTimeImmutable::createFromInterface($this->created)

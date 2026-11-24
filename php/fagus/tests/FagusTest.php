@@ -22,10 +22,13 @@ use Fagus\Layout\Box;
 use Fagus\Layout\Element;
 use Fagus\Layout\Page;
 use Fagus\Layout\Section;
+use Fagus\PageLayout;
+use Fagus\PageMode;
 use Fagus\Permission;
 use Fagus\Relationship;
 use Fagus\Severity;
 use Fagus\Tests\Fixtures\ArrayCache;
+use Fagus\Zoom;
 use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -852,6 +855,46 @@ final class FagusTest extends TestCase
         $this->expectException(RenderException::class);
         $this->expectExceptionMessageMatches('~^1 diagnostic in strict mode:\n~');
         Fagus::html('<style>p { colr: red }</style><p>x</p>')->strict()->render();
+    }
+
+    #[Test]
+    public function it_chooses_how_the_pdf_opens(): void
+    {
+        $html = '<title>Handbuch</title><h1>Eins</h1><h1 style="break-before: page">Zwei</h1>';
+        $document = Fagus::html($html)->created(new DateTimeImmutable('2026-11-25T12:00:00Z'));
+        $this->assertArrayNotHasKey('view', $document->request(1)[0]);
+        $this->assertArrayNotHasKey('view', $document->initialView()->request(1)[0]);
+
+        $view = $document->initialView(PageMode::Outlines, PageLayout::TwoColumnRight, Zoom::FitWidth, 2, fitWindow: true);
+        $this->assertSame(
+            ['pageMode' => 'outlines', 'pageLayout' => 'two-column-right', 'zoom' => 'fit-width', 'page' => 2, 'fitWindow' => true],
+            $view->request(1)[0]['view'],
+        );
+        $this->assertSame(['zoom' => 150.0, 'centerWindow' => true], $document->initialView(zoom: 150, centerWindow: true)->request(1)[0]['view']);
+
+        $pdf = $view->render();
+        $this->assertSame([], $pdf->diagnostics());
+        $decoded = self::decoded($pdf->bytes());
+        $this->assertStringContainsString('/ViewerPreferences<</DisplayDocTitle true/FitWindow true>>', $decoded);
+        $this->assertStringContainsString('/PageMode/UseOutlines', $decoded);
+        $this->assertStringContainsString('/PageLayout/TwoColumnRight', $decoded);
+        $this->assertMatchesRegularExpression('~/OpenAction\[\d+ 0 R/FitH 841\.92\]~', $decoded);
+        $this->assertStringContainsString('/XYZ null 841.92 1.5]', self::decoded($document->initialView(zoom: 150.0)->render()->bytes()));
+        $this->assertSame($document->render()->bytes(), $document->initialView()->render()->bytes());
+
+        // A page the document does not have is left out, and said.
+        $pdf = $document->initialView(page: 3)->render();
+        $this->assertSame(['pdf.view-ignored'], array_map(static fn (Diagnostic $diagnostic): string => $diagnostic->code, $pdf->diagnostics()));
+        $this->assertStringNotContainsString('/OpenAction', self::decoded($pdf->bytes()));
+
+        foreach ([[0.0, null, 'The zoom must be a number of percent above 0, Zoom::FitPage or Zoom::FitWidth, not 0.'], [-50.0, null, 'not -50.'], [INF, null, 'not INF.'], [null, 0, 'The page to open at must be at least 1, not 0.']] as [$zoom, $page, $message]) {
+            try {
+                $document->initialView(zoom: $zoom, page: $page);
+                $this->fail('No exception for an invalid view.');
+            } catch (InvalidArgumentException $exception) {
+                $this->assertStringEndsWith($message, $exception->getMessage());
+            }
+        }
     }
 
     #[Test]

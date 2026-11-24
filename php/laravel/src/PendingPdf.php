@@ -10,10 +10,13 @@ use Fagus\Conformance;
 use Fagus\Document;
 use Fagus\Engine;
 use Fagus\InvoiceProfile;
+use Fagus\PageLayout;
+use Fagus\PageMode;
 use Fagus\Pdf;
 use Fagus\Permission;
 use Fagus\Relationship;
 use Fagus\Signature;
+use Fagus\Zoom;
 use Illuminate\Contracts\Support\Responsable;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Storage;
@@ -128,6 +131,17 @@ final class PendingPdf implements Responsable
         ?array $permissions = null,
     ): self {
         return $this->with($this->document->encrypt($userPassword, $ownerPassword, $permissions));
+    }
+
+    public function initialView(
+        ?PageMode $pageMode = null,
+        ?PageLayout $pageLayout = null,
+        Zoom|float|null $zoom = null,
+        ?int $page = null,
+        bool $fitWindow = false,
+        bool $centerWindow = false,
+    ): self {
+        return $this->with($this->document->initialView($pageMode, $pageLayout, $zoom, $page, $fitWindow, $centerWindow));
     }
 
     public function created(DateTimeInterface $date): self
