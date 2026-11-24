@@ -863,6 +863,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "fagus-invariants"
+version = "1.1.0"
+dependencies = [
+ "fagus",
+ "fagus-dom",
+ "fagus-layout",
+]
+
+[[package]]
 name = "fagus-layout"
 version = "1.1.1"
 dependencies = [

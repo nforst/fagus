@@ -1,0 +1,20 @@
+[package]
+publish = false
+name = "fagus-invariants"
+description = "What holds for every layout of Fagus, checked on the pages of a render"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# Without `parallel`, which the fuzz targets avoid: they build this crate too, and features add up.
+fagus = { workspace = true, features = ["inspect"] }
+fagus-dom.workspace = true
+fagus-layout.workspace = true

@@ -260,6 +260,7 @@ compresses on rayon's global pool.
 | `crates/fagus` | Public Rust API |
 | `crates/fagus-cli` | The `fagus` binary |
 | `crates/fagus-testkit` | Reference tests, image comparison, benchmarks |
+| `crates/fagus-invariants` | Checks of what holds for every layout, for the tests and the fuzzer |
 | `docs` | The [documentation](https://fagus.niklasforst.de/docs) |
 | `docs/adr` | Architecture decision records |
 | `docs/protocol.md` | The worker protocol between the binary and PHP |
