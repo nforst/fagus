@@ -43,3 +43,4 @@
 - { page: adr/0006-pages-that-grow-with-their-content, title: 6. Pages that grow with their content, group: Internals, parent: Architecture decisions, optional: true }
 - { page: adr/0007-layers-for-screen-and-print, title: "7. Layers for screen and print, and form fields as an option", group: Internals, parent: Architecture decisions, optional: true }
 - { page: adr/0008-c-library-experimental, title: 8. An experimental C library beside the worker, group: Internals, parent: Architecture decisions, optional: true }
+- { page: adr/0009-resources-in-batches, title: "9. Resources in batches, fetching stays with the caller", group: Internals, parent: Architecture decisions, optional: true }

@@ -12,7 +12,7 @@ the resource:
 
 1. **A `data:` URL**: the data in the URL itself, base64 or percent-encoded.
 2. **The resources handed over** with `resource($url, $data)`.
-3. **The resolver** set with `resolver()`, a PHP callback.
+3. **The resolver** set with `resolver()` or `resolveMany()`, a PHP callback.
 4. **A file inside the root directory**, if a base directory is set.
 
 If none has it, the resource is missing: the document renders without it and the PDF's
@@ -237,7 +237,8 @@ diagnostics name it as `resource.not-loaded`. An image that must not be missing 
 with `strict()` in a test than by a resolver that throws.
 
 A resolver fetches one URL after the other, and the render waits for each. For a document with
-many remote images, fetch them before the render, as the next section shows.
+many remote images, fetch them before the render, as the next section shows, or answer many
+URLs at once with [`resolveMany()`](#answer-many-requests-at-once-with-resolvemany).
 
 ## Fetch remote images before the render
 
@@ -284,6 +285,183 @@ The same rules apply as for a resolver: the list of hosts, no redirects, a timeo
 `resource()` must be the URL exactly as the document writes it (see
 [above](#hand-over-data-with-resource)). An image that was not fetched is missing from the PDF
 with a `resource.not-loaded` diagnostic, unless a resolver or a file answers it.
+
+## Answer many requests at once with `resolveMany()`
+
+Where the URLs are not known before the render, as with a stylesheet that names its images or a
+document someone else wrote, `resolveMany()` does the same from inside it. Fagus knows most of a
+document's resources before it uses them and asks for them together: the linked stylesheets,
+then the first font file of each `@font-face` rule, then the images. The callback gets the URLs,
+at most 64 in one call, fetches them concurrently and returns the data by URL:
+
+```php
+use Fagus\Laravel\Facades\Fagus;
+use Illuminate\Http\Client\Pool;
+use Illuminate\Http\Client\Response;
+use Illuminate\Support\Facades\Http;
+
+$hosts = ['cdn.example.com', 'media.example.com'];
+
+$allowed = function (string $url) use ($hosts): bool {
+    $parts = parse_url($url);
+
+    return is_array($parts)
+        && strtolower($parts['scheme'] ?? '') === 'https'
+        && in_array(strtolower($parts['host'] ?? ''), $hosts, true)
+        && ! isset($parts['user']) && ! isset($parts['pass']) && ! isset($parts['port']);
+};
+
+return Fagus::view('catalog.show', $data)
+    ->resolveMany(function (array $urls) use ($allowed): array {
+        $urls = array_values(array_filter($urls, $allowed));
+        $responses = Http::pool(fn (Pool $pool) => array_map(
+            fn (string $url) => $pool->as($url)->withoutRedirecting()->connectTimeout(3)->timeout(5)->get($url),
+            $urls,
+        ));
+        $found = [];
+        foreach ($responses as $url => $response) {
+            // A request that failed is an exception in the list, not a response.
+            if ($response instanceof Response && $response->status() === 200) {
+                $found[$url] = $response->body();
+            }
+        }
+
+        return $found;
+    })
+    ->download('catalog.pdf');
+```
+
+A URL the callback leaves out is not found: Fagus looks for a file inside the root next, so
+relative URLs and files keep working beside the remote images. The rules of the
+[allowlist](#remote-images-through-the-resolver-with-a-host-allowlist) apply here as there.
+
+In plain PHP, `curl_multi` runs the transfers side by side:
+
+```php
+use Fagus\Fagus;
+
+/**
+ * The data at the https URLs of the hosts, by URL, fetched concurrently.
+ *
+ * @param  list<string>  $urls
+ * @param  list<string>  $hosts
+ * @return array<string, string>
+ */
+function fetch_all_allowed(array $urls, array $hosts, int $limit = 5 * 1024 * 1024): array
+{
+    $multi = curl_multi_init();
+    $handles = [];
+    $data = [];
+    foreach ($urls as $url) {
+        $parts = parse_url($url);
+        if (! is_array($parts)
+            || strtolower($parts['scheme'] ?? '') !== 'https'
+            || ! in_array(strtolower($parts['host'] ?? ''), $hosts, true)
+            || isset($parts['user']) || isset($parts['pass']) || isset($parts['port'])) {
+            continue;
+        }
+        $data[$url] = '';
+        $handle = curl_init($url);
+        curl_setopt_array($handle, [
+            CURLOPT_PROTOCOLS => CURLPROTO_HTTPS,
+            CURLOPT_FOLLOWLOCATION => false,
+            CURLOPT_CONNECTTIMEOUT => 3,
+            CURLOPT_TIMEOUT => 5,
+            // Returning another number than the length of the chunk stops the transfer.
+            CURLOPT_WRITEFUNCTION => function ($handle, string $chunk) use (&$data, $url, $limit): int {
+                $data[$url] .= $chunk;
+
+                return strlen($data[$url]) > $limit ? 0 : strlen($chunk);
+            },
+        ]);
+        curl_multi_add_handle($multi, $handle);
+        $handles[$url] = $handle;
+    }
+    do {
+        $status = curl_multi_exec($multi, $running);
+        if ($running > 0) {
+            curl_multi_select($multi, 1.0);
+        }
+    } while ($running > 0 && $status === CURLM_OK);
+    // The transfers that ended with an error: a timeout, one stopped for its size.
+    $failed = [];
+    while (($info = curl_multi_info_read($multi)) !== false) {
+        if ($info['result'] !== CURLE_OK) {
+            $failed[spl_object_id($info['handle'])] = true;
+        }
+    }
+    $found = [];
+    foreach ($handles as $url => $handle) {
+        if (! isset($failed[spl_object_id($handle)]) && curl_getinfo($handle, CURLINFO_RESPONSE_CODE) === 200) {
+            $found[$url] = $data[$url];
+        }
+        curl_multi_remove_handle($multi, $handle);
+    }
+
+    return $found;
+}
+
+$hosts = ['cdn.example.com', 'media.example.com'];
+
+$pdf = Fagus::html($html)
+    ->resolveMany(fn (array $urls): array => fetch_all_allowed($urls, $hosts))
+    ->render();
+```
+
+What to know about the calls:
+
+- Each URL comes once in a render, in the order a `resolver()` would get them. The PDF does not
+  depend on which of the two callbacks answers.
+- Resources that only show while others are read come one at a time, as a list of one URL: the
+  stylesheets of `@import` rules, a later source of a font whose first could not be loaded, the
+  sprites and images of inline SVG, and the documents of `<iframe>`s.
+- The answers of one call are in PHP's memory together and travel to the engine in one message
+  of at most 1 GiB. Sixty-four product photos are no concern; scans of 20 MB each are better
+  handed over as files in the base directory.
+- `resolver()` and `resolveMany()` replace each other; the one called last is asked.
+- Fagus and the package still fetch nothing themselves: no HTTP client comes with them, and the
+  rules stay yours ([ADR 9](adr/0009-resources-in-batches.md)).
+
+## Keep what a resolver fetched with `cache()`
+
+`cache()` puts a [PSR-16](https://www.php-fig.org/psr/psr-16/) cache in front of the resolver:
+what `resolver()` or `resolveMany()` returned for a URL is kept, and the next document that names
+the URL gets it from the cache, without the callback. Laravel's cache stores are PSR-16 caches:
+
+```php
+use Illuminate\Support\Facades\Cache;
+
+Fagus::view('catalog.show', $data)
+    ->resolveMany($fetch)
+    ->cache(Cache::store('file'), ttl: 3600);
+```
+
+In plain PHP, any PSR-16 implementation works, such as `symfony/cache` with its `Psr16Cache`:
+
+```php
+use Symfony\Component\Cache\Adapter\FilesystemAdapter;
+use Symfony\Component\Cache\Psr16Cache;
+
+$cache = new Psr16Cache(new FilesystemAdapter('fagus', 0, __DIR__.'/storage/cache'));
+
+Fagus::html($html)->resolver($fetch)->cache($cache, ttl: 86400);
+```
+
+- `$ttl` is how long an entry lives: seconds, a `DateInterval`, or `null` for the default of the
+  cache.
+- The keys are `$prefix` and the SHA-256 of the URL, `fagus.resource.` and 64 hexadecimal digits
+  by default, since a PSR-16 key may not hold characters such as `:` and `/`. Give documents of
+  different tenants different prefixes if the same URL means different data for them.
+- Only what was found is kept. A URL the resolver did not have is asked for again with the next
+  document, so that an image that was missing for a moment does not stay missing.
+- With `resolveMany()`, the cache is read once for a batch (`getMultiple()`), the callback gets
+  the URLs the cache does not have, and what it returns is written once (`setMultiple()`).
+- Data handed over with `resource()` and files are not cached; they never reach the resolver.
+- The package needs `psr/simple-cache` for it (`composer require psr/simple-cache`), which
+  Laravel and Symfony's cache bring along.
+
+A cache that holds images makes a PDF depend on what was fetched earlier. For PDFs that must be
+the same every time, such as invoices, keep the files in the base directory instead.
 
 ## `data:` URLs
 
@@ -402,7 +580,8 @@ diagnostics report the stylesheet as `resource.not-loaded`. A resolver can fetch
    first, as in browsers.
 
 The resolver answers both kinds of URL, for the hosts you allow, with a timeout, and keeps what it
-fetched: Fagus asks again for every document.
+fetched: Fagus asks again for every document. [`cache()`](#keep-what-a-resolver-fetched-with-cache)
+keeps it for you in a PSR-16 cache; the callbacks below keep it themselves.
 
 ```php
 use Fagus\Fagus;

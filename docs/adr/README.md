@@ -11,3 +11,4 @@ consequences ([ADR 1](0001-record-architecture-decisions.md)).
 6. [Pages that grow with their content: `-fagus-page-height`](0006-pages-that-grow-with-their-content.md)
 7. [Layers for screen and print, and form fields as an option](0007-layers-for-screen-and-print.md)
 8. [An experimental C library beside the worker](0008-c-library-experimental.md)
+9. [Resources in batches, fetching stays with the caller](0009-resources-in-batches.md)

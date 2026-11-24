@@ -436,7 +436,8 @@ In Laravel, set `families` in `config/fagus.php`.
 Not through Fagus. Hand them over with `resource()`, or answer the URLs with a `resolver()` that
 fetches what you allow
 ([resources.md](resources.md#remote-images-through-the-resolver-with-a-host-allowlist)); for many
-images, [fetch them before the render](resources.md#fetch-remote-images-before-the-render).
+images, [fetch them before the render](resources.md#fetch-remote-images-before-the-render) or
+[many at once with `resolveMany()`](resources.md#answer-many-requests-at-once-with-resolvemany).
 
 ### Can Fagus render a page of my running site?
 

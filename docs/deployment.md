@@ -320,10 +320,10 @@ new Engine(timeout: 120.0);   // in Laravel: 'timeout' => 120 in config/fagus.ph
 ```
 
 The limit applies to each answer, not to the whole document: time spent in your resolver
-callback does not count. There is no timeout on Windows. Inside the worker, each document has a
-time limit of its own, a tenth less than the timeout unless `timeLimit` says otherwise: a
-document that takes longer in all ends with a `RenderException` (`limit.time`), and the worker
-stays ([php.md](php.md#limits)). For requests, keep the timeout below the
+callback (`resolver()`, `resolveMany()`) does not count. There is no timeout on Windows. Inside
+the worker, each document has a time limit of its own, a tenth less than the timeout unless
+`timeLimit` says otherwise: a document that takes longer in all ends with a `RenderException`
+(`limit.time`), and the worker stays ([php.md](php.md#limits)). For requests, keep the timeout below the
 limits of PHP-FPM (`request_terminate_timeout`) and of your web server, or render long documents
 in a queue.
 
