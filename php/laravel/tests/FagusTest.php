@@ -14,6 +14,10 @@ use Fagus\Laravel\PendingPdf;
 use Fagus\Permission;
 use Fagus\Signature;
 use Fagus\Tests\Fixtures\FakeWorker;
+use Illuminate\Http\Client\Pool;
+use Illuminate\Http\Client\Response;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
@@ -131,6 +135,48 @@ final class FagusTest extends TestCase
         $pdf = Fagus::html('<img src="corpus/images/logo.png" width="40">')->render();
 
         $this->assertSame([], $pdf->diagnostics());
+    }
+
+    #[Test]
+    public function it_fetches_many_resources_at_once_and_keeps_them_in_a_cache_store(): void
+    {
+        // The callback of the documentation: the URLs of a batch through `Http::pool()`.
+        Http::fake([
+            'cdn.example.com/a.svg' => Http::response('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="red"/></svg>'),
+            'cdn.example.com/b.svg' => Http::response('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="blue"/></svg>'),
+            '*' => Http::response('', 404),
+        ]);
+        $batches = [];
+        $pending = Fagus::html('<img src="https://cdn.example.com/a.svg"><img src="https://cdn.example.com/b.svg"><img src="https://cdn.example.com/c.svg">')
+            ->resolveMany(function (array $urls) use (&$batches): array {
+                $batches[] = $urls;
+                $responses = Http::pool(fn (Pool $pool) => array_map(
+                    fn (string $url) => $pool->as($url)->withoutRedirecting()->timeout(5)->get($url),
+                    $urls,
+                ));
+                $found = [];
+                foreach ($responses as $url => $response) {
+                    if ($response instanceof Response && $response->status() === 200) {
+                        $found[$url] = $response->body();
+                    }
+                }
+
+                return $found;
+            })
+            ->cache(Cache::store('array'), 60);
+        $this->assertInstanceOf(PendingPdf::class, $pending);
+
+        $first = $pending->render();
+        $this->assertSame([['https://cdn.example.com/a.svg', 'https://cdn.example.com/b.svg', 'https://cdn.example.com/c.svg']], $batches);
+        $this->assertSame(['resource.not-loaded'], array_map(static fn ($diagnostic): string => $diagnostic->code, $first->diagnostics()));
+        $this->assertTrue(Cache::store('array')->has('fagus.resource.'.hash('sha256', 'https://cdn.example.com/a.svg')));
+        Http::assertSentCount(3);
+
+        // The second document asks only for the image that was missing.
+        $second = $pending->render();
+        $this->assertSame(['https://cdn.example.com/c.svg'], $batches[1]);
+        Http::assertSentCount(4);
+        $this->assertSame(array_map(strval(...), $first->diagnostics()), array_map(strval(...), $second->diagnostics()));
     }
 
     #[Test]

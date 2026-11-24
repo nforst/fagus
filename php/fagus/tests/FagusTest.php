@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Fagus\Tests;
 
+use DateInterval;
 use DateTimeImmutable;
 use DateTimeZone;
 use Fagus\Binary;
@@ -24,6 +25,7 @@ use Fagus\Layout\Section;
 use Fagus\Permission;
 use Fagus\Relationship;
 use Fagus\Severity;
+use Fagus\Tests\Fixtures\ArrayCache;
 use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -464,6 +466,75 @@ final class FagusTest extends TestCase
         })->render();
 
         $this->assertSame([64, 64, 22], $sizes);
+    }
+
+    #[Test]
+    public function it_keeps_what_a_resolver_found_in_a_cache(): void
+    {
+        $html = '<link rel=stylesheet href="https://cdn.example.com/a.css"><img src="1.svg"><img src="missing.svg"><p>x</p>';
+        $files = [
+            'https://cdn.example.com/a.css' => 'p { aus-a: 1 }',
+            '1.svg' => '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="red"/></svg>',
+        ];
+        $cache = new ArrayCache;
+        $asked = [];
+        $document = Fagus::html($html)
+            ->created(new DateTimeImmutable('2026-11-02T12:00:00Z'))
+            ->resolveMany(function (array $urls) use (&$asked, $files): array {
+                $asked[] = $urls;
+
+                return array_intersect_key($files, array_flip($urls));
+            })
+            ->cache($cache, 3600);
+
+        // The first document asks the resolver, and what it found is kept under keys PSR-16
+        // allows: the prefix and the SHA-256 of the URL.
+        $first = $document->render();
+        $this->assertSame([['https://cdn.example.com/a.css'], ['1.svg', 'missing.svg']], $asked);
+        $css = 'fagus.resource.'.hash('sha256', 'https://cdn.example.com/a.css');
+        $svg = 'fagus.resource.'.hash('sha256', '1.svg');
+        $this->assertSame([$css => $files['https://cdn.example.com/a.css'], $svg => $files['1.svg']], $cache->entries);
+        $this->assertSame([
+            ['getMultiple', [$css]],
+            ['setMultiple', [$css], 3600],
+            ['getMultiple', [$svg, 'fagus.resource.'.hash('sha256', 'missing.svg')]],
+            ['setMultiple', [$svg], 3600],
+        ], $cache->calls);
+
+        // The second gets them from the cache: the resolver is asked only for what it did not
+        // find, and nothing new is written.
+        $asked = [];
+        $cache->calls = [];
+        $second = $document->render();
+        $this->assertSame([['missing.svg']], $asked);
+        $this->assertSame(['getMultiple', 'getMultiple'], array_column($cache->calls, 0));
+        $this->assertSame($first->bytes(), $second->bytes());
+        $this->assertSame(array_map(strval(...), $first->diagnostics()), array_map(strval(...), $second->diagnostics()));
+
+        // A resolver for one URL goes through the cache too, under the prefix and for the time
+        // given; data handed over never reaches it.
+        $cache = new ArrayCache;
+        $asked = [];
+        $single = Fagus::html($html)
+            ->resource('1.svg', $files['1.svg'])
+            ->resolver(function (string $url) use (&$asked, $files): ?string {
+                $asked[] = $url;
+
+                return $files[$url] ?? null;
+            })
+            ->cache($cache, new DateInterval('P1D'), 'tenant-7.');
+        $single->render();
+        $single->render();
+        $this->assertSame(['https://cdn.example.com/a.css', 'missing.svg', 'missing.svg'], $asked);
+        $this->assertSame(['tenant-7.'.hash('sha256', 'https://cdn.example.com/a.css')], array_keys($cache->entries));
+        $written = array_values(array_filter($cache->calls, static fn (array $call): bool => $call[0] === 'setMultiple'));
+        $this->assertCount(1, $written);
+        $this->assertEquals(new DateInterval('P1D'), $written[0][2]);
+
+        // Without a resolver there is nothing to keep, and the cache is left alone.
+        $cache = new ArrayCache;
+        Fagus::html($html)->cache($cache)->render();
+        $this->assertSame([], $cache->calls);
     }
 
     #[Test]

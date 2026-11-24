@@ -66,9 +66,18 @@ it is immutable: every method returns a changed copy.
 These forward to `Fagus\Document` and take the same arguments; [php.md](php.md#document)
 describes each one:
 
-`baseDirectory()`, `root()`, `stylesheet()`, `resource()`, `resolver()`, `pdfA()`, `tagged()`,
-`accessible()`, `forms()`, `attach()`, `facturX()`, `encrypt()`, `created()`, `sign()`, `strict()`,
-`reportLayout()`.
+`baseDirectory()`, `root()`, `stylesheet()`, `resource()`, `resolver()`, `resolveMany()`,
+`cache()`, `pdfA()`, `tagged()`, `accessible()`, `forms()`, `attach()`, `facturX()`, `encrypt()`,
+`created()`, `sign()`, `strict()`, `reportLayout()`.
+
+`cache()` takes a cache store, which keeps what a resolver fetched for the next PDFs
+([resources.md](resources.md#keep-what-a-resolver-fetched-with-cache)):
+
+```php
+use Illuminate\Support\Facades\Cache;
+
+Fagus::view('catalog.show', $data)->resolveMany($fetch)->cache(Cache::store('file'), ttl: 3600);
+```
 
 ```php
 use Fagus\Conformance;

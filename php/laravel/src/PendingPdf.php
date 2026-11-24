@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Fagus\Laravel;
 
+use DateInterval;
 use DateTimeInterface;
 use Fagus\Conformance;
 use Fagus\Document;
@@ -16,6 +17,7 @@ use Fagus\Signature;
 use Illuminate\Contracts\Support\Responsable;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Storage;
+use Psr\SimpleCache\CacheInterface;
 use SensitiveParameter;
 use Symfony\Component\HttpFoundation\HeaderUtils;
 
@@ -66,6 +68,11 @@ final class PendingPdf implements Responsable
     public function resolveMany(callable $resolver): self
     {
         return $this->with($this->document->resolveMany($resolver));
+    }
+
+    public function cache(CacheInterface $cache, DateInterval|int|null $ttl = null, string $prefix = 'fagus.resource.'): self
+    {
+        return $this->with($this->document->cache($cache, $ttl, $prefix));
     }
 
     public function pdfA(Conformance|string $level = Conformance::PdfA3b): self

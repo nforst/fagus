@@ -202,6 +202,28 @@ that returns something other than an array, or data that is not a string, ends t
 callbacks for Laravel's `Http::pool()` and for `curl_multi`. New in 1.2.0; with a binary older
 than that, the callback gets every URL on its own.
 
+### `cache(CacheInterface $cache, DateInterval|int|null $ttl = null, string $prefix = 'fagus.resource.'): Document`
+
+Keeps what the resolver found in a [PSR-16](https://www.php-fig.org/psr/psr-16/) cache
+(`Psr\SimpleCache\CacheInterface`), and answers from it before the resolver is asked:
+
+```php
+Fagus::html($html)
+    ->resolveMany($fetch)
+    ->cache($cache, ttl: 3600);
+```
+
+It works with `resolver()` and with `resolveMany()`, and does nothing without one of them. `$ttl`
+is the lifetime of an entry in seconds or as a `DateInterval`; `null` leaves it to the cache. The
+key of an entry is `$prefix` and the SHA-256 of the URL in hexadecimal. Only data that was found
+is kept: a URL the resolver did not have is asked for again with the next document. For a batch
+of `resolveMany()`, the cache is read with one `getMultiple()` and written with one
+`setMultiple()`. Data handed over with `resource()` and files are not cached.
+
+The package does not require `psr/simple-cache`; install it (`composer require
+psr/simple-cache`) unless a framework brings it along, as Laravel does. See
+[resources.md](resources.md#keep-what-a-resolver-fetched-with-cache). New in 1.2.0.
+
 ### `pdfA(Conformance|string $level = Conformance::PdfA3b): Document`
 
 Writes the PDF as PDF/A. `$level` is a `Conformance` case or its value: `'1b'`, `'2b'`, `'2u'`,
@@ -584,9 +606,10 @@ Fonts, generic families and system fonts are described in [fonts.md](fonts.md).
 - `timeout` is how long the engine waits for each answer of the worker. When it runs out, the
   engine stops the worker process (it may be stuck) and throws an `EngineException`; the next
   document starts a new worker. A document that asks for many resources through a `resolver()`
-  gets the whole `timeout` for each answer. It does not apply on Windows.
+  or `resolveMany()` gets the whole `timeout` for each answer. It does not apply on Windows.
 - `timeLimit` is how long one document may take in the worker, from start to end, including the
-  time the worker waits for your resolver. When it runs out, the worker ends the document itself
+  time the worker waits for your resolver (it looks at the clock after each answer, so a batch of
+  `resolveMany()` is waited for to its end). When it runs out, the worker ends the document itself
   and answers with an error: the engine throws a `RenderException` whose diagnostics hold
   `limit.time`, and the same worker renders the next document. It applies on every system.
 

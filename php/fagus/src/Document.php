@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace Fagus;
 
 use Closure;
+use DateInterval;
 use DateTimeImmutable;
 use DateTimeInterface;
 use DateTimeZone;
 use Fagus\Exception\InvalidArgumentException;
 use Fagus\Exception\RenderException;
+use Psr\SimpleCache\CacheInterface;
 use SensitiveParameter;
 use TypeError;
 
@@ -33,6 +35,12 @@ final class Document
 
     /** @var (Closure(list<string>): array<string, string>)|null */
     private ?Closure $manyResolver = null;
+
+    private ?CacheInterface $cache = null;
+
+    private DateInterval|int|null $cacheTtl = null;
+
+    private string $cachePrefix = 'fagus.resource.';
 
     private ?Conformance $conformance = null;
 
@@ -160,6 +168,23 @@ final class Document
         $copy = clone $this;
         $copy->manyResolver = $resolver(...);
         $copy->resolver = null;
+
+        return $copy;
+    }
+
+    /**
+     * Keeps what the resolver ({@see self::resolver()}, {@see self::resolveMany()}) found in a
+     * PSR-16 cache, and answers from it before the resolver is asked. An entry lives for `$ttl`
+     * (seconds or an interval; null for the default of the cache) under the key `$prefix` and
+     * the SHA-256 of the URL. What the resolver did not find is not kept, and neither is data
+     * handed over with {@see self::resource()}. Needs `psr/simple-cache`.
+     */
+    public function cache(CacheInterface $cache, DateInterval|int|null $ttl = null, string $prefix = 'fagus.resource.'): self
+    {
+        $copy = clone $this;
+        $copy->cache = $cache;
+        $copy->cacheTtl = $ttl;
+        $copy->cachePrefix = $prefix;
 
         return $copy;
     }
@@ -513,8 +538,49 @@ final class Document
      */
     public function resolveAll(array $urls): array
     {
+        if ($this->resolver === null && $this->manyResolver === null) {
+            return array_fill(0, count($urls), null);
+        }
+        // From the cache first, then the resolver for the rest, which is kept for the next time.
         $found = [];
-        if ($this->manyResolver !== null && $urls !== []) {
+        $keys = [];
+        if ($this->cache !== null && $urls !== []) {
+            foreach ($urls as $url) {
+                $keys[$this->cachePrefix.hash('sha256', $url)] = $url;
+            }
+            foreach ($this->cache->getMultiple(array_map(strval(...), array_keys($keys))) as $key => $data) {
+                if (is_string($data) && isset($keys[$key])) {
+                    $found[$keys[$key]] = $data;
+                }
+            }
+        }
+        $missing = array_values(array_filter($urls, static fn (string $url): bool => ! isset($found[$url])));
+        $fresh = $this->ask($missing);
+        if ($this->cache !== null && $fresh !== []) {
+            $entries = [];
+            foreach ($fresh as $url => $data) {
+                $entries[$this->cachePrefix.hash('sha256', (string) $url)] = $data;
+            }
+            $this->cache->setMultiple($entries, $this->cacheTtl);
+        }
+        $found += $fresh;
+
+        return array_map(static fn (string $url): ?string => $found[$url] ?? null, $urls);
+    }
+
+    /**
+     * What the resolver has of `$urls`, by URL.
+     *
+     * @param  list<string>  $urls
+     * @return array<string, string>
+     */
+    private function ask(array $urls): array
+    {
+        $found = [];
+        if ($urls === []) {
+            return $found;
+        }
+        if ($this->manyResolver !== null) {
             $answers = ($this->manyResolver)($urls);
             if (! is_array($answers)) {
                 throw new TypeError('The callback of resolveMany() must return an array of data by URL, '.get_debug_type($answers).' returned.');
@@ -530,11 +596,21 @@ final class Document
             }
         } elseif ($this->resolver !== null) {
             foreach ($urls as $url) {
-                $found[$url] ??= ($this->resolver)($url);
+                if (! isset($found[$url]) && ($data = self::data(($this->resolver)($url))) !== null) {
+                    $found[$url] = $data;
+                }
             }
         }
 
-        return array_map(static fn (string $url): ?string => $found[$url] ?? null, $urls);
+        return $found;
+    }
+
+    /**
+     * What a resolver answered: data or null.
+     */
+    private static function data(?string $data): ?string
+    {
+        return $data;
     }
 
     /**
