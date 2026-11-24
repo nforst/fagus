@@ -29,10 +29,15 @@ const FULL_CHROMA: u8 = 90;
 /// JPEG is no smaller than its file, a gray PNG with an ICC profile (which does not fit the
 /// decoded RGB pixels), an SVG or PDF image, and one that does not decode.
 pub(crate) fn image(data: &[u8], format: ImageFormat, quality: u8, interpolate: bool) -> Option<Image> {
-    let (width, height, pixels, icc, lossless) = source(data, format)?;
-    let jpeg = encode(width, height, &pixels, icc.as_deref(), quality)?;
-    drop(pixels);
-    if lossless && jpeg.len() >= data.len() {
+    let source = source(data, format)?;
+    let jpeg = encode(
+        source.width,
+        source.height,
+        &source.pixels,
+        source.icc.as_deref(),
+        quality,
+    )?;
+    if source.lossless && jpeg.len() >= data.len() {
         return None;
     }
     Image::from_jpeg(jpeg.into(), interpolate).ok()
@@ -66,10 +71,21 @@ pub(crate) fn filtered(
     Image::from_jpeg(jpeg.into(), interpolate).ok()
 }
 
-/// The RGBA pixels of an image that may become a JPEG, with its width and height, the ICC
-/// profile its colors are in, and whether its format is one without loss.
-#[allow(clippy::type_complexity)]
-fn source(data: &[u8], format: ImageFormat) -> Option<(u32, u32, Vec<u8>, Option<Vec<u8>>, bool)> {
+/// An image that may become a JPEG, decoded.
+struct Source {
+    width: u32,
+    height: u32,
+    /// RGBA.
+    pixels: Vec<u8>,
+    /// The ICC profile its colors are in.
+    icc: Option<Vec<u8>>,
+    /// Whether its format is one without loss.
+    lossless: bool,
+}
+
+/// The pixels of an image that may become a JPEG; `None` for one that stays as it is whatever
+/// its pixels are, and one that does not decode.
+fn source(data: &[u8], format: ImageFormat) -> Option<Source> {
     let (icc, lossless) = match format {
         ImageFormat::Png => {
             let decoder = png::Decoder::new(Cursor::new(data));
@@ -91,7 +107,13 @@ fn source(data: &[u8], format: ImageFormat) -> Option<(u32, u32, Vec<u8>, Option
         ImageFormat::Gif | ImageFormat::Bmp | ImageFormat::Tiff => (None, true),
         ImageFormat::Avif => {
             let avif = crate::avif::decode(data)?;
-            return Some((avif.width, avif.height, avif.pixels, avif.icc, false));
+            return Some(Source {
+                width: avif.width,
+                height: avif.height,
+                pixels: avif.pixels,
+                icc: avif.icc,
+                lossless: false,
+            });
         }
         // Only a CMYK JPEG without a profile is decoded (see [`crate::decode::cmyk_jpeg`]); PDF
         // takes every other JPEG as it is.
@@ -103,12 +125,24 @@ fn source(data: &[u8], format: ImageFormat) -> Option<(u32, u32, Vec<u8>, Option
                 .iter()
                 .flat_map(|[r, g, b]| [*r, *g, *b, 255])
                 .collect();
-            return Some((width, height, pixels, None, false));
+            return Some(Source {
+                width,
+                height,
+                pixels,
+                icc: None,
+                lossless: false,
+            });
         }
         ImageFormat::Svg | ImageFormat::Pdf(_) => return None,
     };
     let (width, height, pixels) = crate::decode::rgba(data, format)?;
-    Some((width, height, pixels, icc, lossless))
+    Some(Source {
+        width,
+        height,
+        pixels,
+        icc,
+        lossless,
+    })
 }
 
 /// Whether a WebP image is compressed with loss (VP8, not VP8L).
@@ -190,10 +224,11 @@ mod tests {
     }
 
     fn sha256(data: &[u8]) -> String {
-        Sha256::digest(data)
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect()
+        use std::fmt::Write;
+        Sha256::digest(data).iter().fold(String::new(), |mut hex, byte| {
+            let _ = write!(hex, "{byte:02x}");
+            hex
+        })
     }
 
     fn decoded(jpeg: &[u8]) -> (usize, Vec<u8>) {
