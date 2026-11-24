@@ -18,6 +18,11 @@ Fagus brings Inter in regular and bold (SIL Open Font License 1.1). A document r
 fonts of your own: text in a family that no font has, and characters that no other font covers, are
 set in Inter. Italics are made up by slanting the regular face.
 
+This includes the default: a document that sets no `font-family` asks for `serif`, as in a
+browser, and Fagus has no serif font, so it is set in Inter, or in the first font of your font
+directories if there are any. To choose the font, set `font-family` on `body`, or
+[set the generic families](#set-the-generic-families).
+
 Inter covers Latin, Greek and Cyrillic. Characters it lacks (Chinese, Japanese, Arabic, emoji …)
 show as a "no glyph" box unless you add a font that has them. A normal PDF gets no warning for this;
 PDF/A refuses such a document ("Inter has no glyph for `日`, and no other font has one").

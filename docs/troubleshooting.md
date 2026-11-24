@@ -352,7 +352,9 @@ Fagus aims to print like Chrome on Linux. When a PDF differs from Chrome's, chec
 
 - **Fonts.** Chrome uses the fonts installed on the machine; Fagus does not by default, so that
   every machine prints the same. A family Fagus does not have falls back, in the end to the
-  built-in Inter. Load the fonts with `@font-face`, put them in a font directory, or turn on
+  built-in Inter, and so does text without a `font-family`, which Chrome sets in a serif font
+  ([Why is my text in Inter, or in the wrong font?](#why-is-my-text-in-inter-or-in-the-wrong-font)).
+  Load the fonts with `@font-face`, put them in a font directory, or turn on
   `systemFonts` ([fonts.md](fonts.md)). Look for `resource.not-loaded` diagnostics of fonts.
 - **Paper size.** Without `@page { size }`, Fagus prints A4; Chrome uses the paper size of its
   print settings, which is Letter in the United States. Set the size in the document:
@@ -396,6 +398,21 @@ document in a margin box:
 ```
 
 See [paged-media.md](paged-media.md).
+
+### Why is my text in Inter, or in the wrong font?
+
+Fagus uses only the fonts you give it. A family it does not have falls back to the built-in Inter,
+and so do `serif` and text without any `font-family`: Fagus has no serif font. With fonts in a font
+directory, the fallback is the first font found there instead (in alphabetical order of the
+files' paths), which may not be the one you expect. Name the family in your CSS
+(`body { font-family: "Source Serif 4" }`), or set the generic families on the engine
+([fonts.md](fonts.md#set-the-generic-families)):
+
+```php
+new Engine(fontDirectories: [...], serif: 'Source Serif 4', sansSerif: 'Inter');
+```
+
+In Laravel, set `families` in `config/fagus.php`.
 
 ### How do I force a page break?
 

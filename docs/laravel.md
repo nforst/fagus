@@ -367,7 +367,7 @@ This writes `config/fagus.php`. Every key, with its environment variable and def
 | `fonts` | – | `[resource_path('fonts')]` | Directories with fonts for every document: TTF, OTF, TTC, OTC, WOFF and WOFF2 files, in the directory and its subdirectories. Directories that do not exist are skipped, so the default works without a `resources/fonts`; a plain `Fagus\Engine` throws an `EngineException` for them instead. |
 | `system_fonts` | `FAGUS_SYSTEM_FONTS` | `false` | Whether the fonts installed on the machine serve too, as in Chrome. Off, so that documents look the same on every machine. |
 | `locale` | `FAGUS_LOCALE` | `null` | The language of the texts that form controls show of their own (button labels, date formats) and of the PDF where a document gives no `lang`, such as `de-DE`. American English if `null`. |
-| `families` | – | `['sans-serif' => null, 'serif' => null, 'monospace' => null]` | The families that the generic families name. |
+| `families` | – | `['sans-serif' => null, 'serif' => null, 'monospace' => null]` | The families that `sans-serif`, `serif` and `monospace` stand for, by the names of fonts in `fonts`. `serif` is also the font of text without a `font-family`. Where one is `null`, Fagus takes the first font in `fonts` (for `monospace` a fixed-pitch one, if there is one), else the built-in Inter ([fonts.md](fonts.md#set-the-generic-families)). |
 | `base_directory` | – | `public_path()` | The directory that relative URLs in documents resolve against. Only files inside it, or inside `root`, are read. |
 | `root` | – | `null` | A larger directory that contains `base_directory`, for documents whose URLs lead out of it (`../fonts/…`). URLs that start with `/` resolve against it. |
 | `tagged` | – | `true` | Whether PDFs are tagged with the logical structure that screen readers read. Single documents can say otherwise with `tagged()` or ask for PDF/UA with `accessible()`. |
@@ -390,7 +390,7 @@ return [
     'locale' => env('FAGUS_LOCALE', 'de-DE'),
     'families' => [
         'sans-serif' => 'Inter',
-        'serif' => null,
+        'serif' => 'Source Serif 4',
         'monospace' => 'JetBrains Mono',
     ],
     'base_directory' => resource_path('pdf'),

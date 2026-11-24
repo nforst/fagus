@@ -34,7 +34,9 @@ return [
     'locale' => env('FAGUS_LOCALE'),
 
     /*
-    | The families used for the generic families sans-serif, serif and monospace.
+    | The families used for the generic families sans-serif, serif and monospace, by the names of
+    | fonts in the directories above. serif is also the font of text without a font-family. Where a
+    | family is null, Fagus takes the first font of the directories, else the built-in Inter.
     */
     'families' => [
         'sans-serif' => null,

@@ -325,6 +325,10 @@ Fonts that wkhtmltopdf found installed on the server are not used by default: lo
 fonts ([fonts.md](fonts.md)). Web fonts from Google Fonts or a similar service load through a
 resolver ([resources.md](resources.md#load-web-fonts-through-the-resolver)).
 
+wkhtmltopdf set text without a `font-family` in the system's serif font. Fagus has none: such text
+comes out in the built-in Inter, or in the first font of your font directories. Set `font-family`
+on `body`, or set the `serif` family ([fonts.md](fonts.md#set-the-generic-families)).
+
 ## The PDF
 
 | wkhtmltopdf | Fagus |

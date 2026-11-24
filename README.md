@@ -188,7 +188,9 @@ repository was archived in 2023 and whose WebKit dates from 2012; it is not meas
 
 Fonts come from `@font-face` rules and from the font directories you configure. Fagus brings Inter
 in regular and bold for text that no other font covers, so it also renders without fonts of its
-own.
+own. Inter is then also what `serif` and text without a `font-family` get, as Fagus has no serif
+font; with fonts of yours, it is the first of them, unless the engine's `serif`, `sansSerif` and
+`monospace` options name the families ([fonts](https://fagus.niklasforst.de/docs/fonts#set-the-generic-families)).
 
 With `systemFonts: true` (`system_fonts` in Laravel, `--system-fonts` on the command line) the fonts
 installed on the machine serve too, found as Chrome finds them: on macOS in `/System/Library/Fonts`,

@@ -107,6 +107,12 @@ The document describes itself, as in a browser: the page size and margins come f
 PDF's title from `<title>` and its language from `<html lang>`. Without an `@page` rule, pages are
 A4 (Chrome uses the paper size of its printer settings, often Letter).
 
+Text is set in Inter, the font built into Fagus, until you add fonts of your own. Fagus has no
+serif font: text without a `font-family`, which a browser sets in Times, comes out in Inter too,
+and in the first font of your font directories once there are any. Put font files into a font
+directory and name the family in your CSS, or say which families `serif`, `sans-serif` and
+`monospace` stand for ([fonts.md](fonts.md#set-the-generic-families)).
+
 The first document starts the engine's worker process, which takes a few milliseconds; the
 following documents of the same PHP process render on the running worker.
 
@@ -137,6 +143,7 @@ filesystem disks work after `composer require`. Write the document as a Blade vi
   <title>Invoice {{ $invoice->number }}</title>
   <style>
     @page { size: A4; margin: 20mm 18mm; }
+    body { font-family: sans-serif; }
   </style>
 </head>
 <body>
