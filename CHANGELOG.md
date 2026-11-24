@@ -8,6 +8,7 @@ All notable changes to this project are documented in this file. The format is b
 ### Added
 
 - Rust: `ResourceLoader::load_many(&[&str])` answers many URLs at once, so that a loader can fetch them concurrently. A render asks with it for the resources it knows before it uses them: the linked style sheets of a document, then the first font file of each `@font-face` rule, then the images, at most `fagus::BATCH` (64) URLs at a time. The default implementation calls `load` for one after the other, so an existing loader is asked for the same URLs as before, and the PDF is the same either way. `@import`ed style sheets, later sources of a font, the sprites of inline SVG and the documents of `<iframe>`s are still asked for one by one.
+- Worker protocol: a caller that sets `askMany` in `R` (with `ask`) is asked for many resources at once. The worker sends `Q` with up to 64 `urls` and reads `q` with `found` for each and the data of those found, for the style sheets, fonts and images it knows before it uses them; it keeps asking with `?` for the rest. Protocol 1 stays: an older worker ignores `askMany` and asks with `?` alone, and a worker never sends `Q` to a caller that did not ask for it. The C library takes `askMany` and ignores it, as it asks its caller nothing.
 
 ## [1.1.1] - 2026-11-25
 

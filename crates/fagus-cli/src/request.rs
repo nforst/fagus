@@ -29,6 +29,9 @@ struct Request {
     resources: Vec<Resource>,
     #[serde(default)]
     ask: bool,
+    /// Whether the caller answers questions for many resources at once (`Q`).
+    #[serde(default)]
+    ask_many: bool,
     #[serde(default)]
     conformance: Option<String>,
     #[serde(default = "yes")]
@@ -206,6 +209,11 @@ pub(crate) trait Caller: Send + Sync {
     /// The resource at `url`, if the caller has it.
     fn resource(&self, id: u64, url: &str) -> Option<Vec<u8>>;
 
+    /// The resources at `urls` that the caller has, in their order, asked for at once.
+    fn resources(&self, id: u64, urls: &[&str]) -> Vec<Option<Vec<u8>>> {
+        urls.iter().map(|url| self.resource(id, url)).collect()
+    }
+
     /// Asks `question` with the header and data blocks of the protocol's message, and returns the
     /// data blocks of the answer.
     fn ask(&self, question: Question, header: Value, data: &[&[u8]]) -> Result<Vec<Vec<u8>>, String>;
@@ -220,6 +228,23 @@ struct Asker {
 impl fagus::ResourceLoader for Asker {
     fn load(&self, url: &str) -> Option<Vec<u8>> {
         self.caller.resource(self.id, url)
+    }
+}
+
+/// Asks the caller as [`Asker`] does, and for the resources the engine asks for together at once
+/// (`askMany`).
+struct BatchAsker(Asker);
+
+impl fagus::ResourceLoader for BatchAsker {
+    fn load(&self, url: &str) -> Option<Vec<u8>> {
+        self.0.load(url)
+    }
+
+    fn load_many(&self, urls: &[&str]) -> Vec<Option<Vec<u8>>> {
+        // (The engine asks for no more at once; a message stays as small whoever asks.)
+        urls.chunks(fagus::BATCH)
+            .flat_map(|urls| self.0.caller.resources(self.0.id, urls))
+            .collect()
     }
 }
 
@@ -330,10 +355,15 @@ fn document(
         document = document.resource(resource.url, take(resource.blob)?);
     }
     if request.ask {
-        document = document.loader(Arc::new(Asker {
+        let asker = Asker {
             caller: Arc::clone(needs(caller, "`ask`")?),
             id: request.id,
-        }));
+        };
+        document = if request.ask_many {
+            document.loader(Arc::new(BatchAsker(asker)))
+        } else {
+            document.loader(Arc::new(asker))
+        };
     }
     if let Some(level) = request.conformance {
         let level =
@@ -572,10 +602,10 @@ mod tests {
             ),
             "a signature with `certificates` needs a caller that answers questions, and there is none"
         );
-        // Without a question to ask, no caller is needed.
+        // Without a question to ask, no caller is needed (`askMany` says how to ask, not whether).
         let Answer::Pdf { header, pdf } = render(
             &engine,
-            json!({ "id": 3, "html": 0, "ask": false }),
+            json!({ "id": 3, "html": 0, "ask": false, "askMany": true }),
             vec![b"<p>x</p>".to_vec()],
             None,
         ) else {

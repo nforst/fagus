@@ -18,6 +18,8 @@ const HELLO: u8 = b'H';
 const RENDER: u8 = b'R';
 const ASK: u8 = b'?';
 const RESOURCE: u8 = b'r';
+const ASK_MANY: u8 = b'Q';
+const RESOURCES: u8 = b'q';
 const PDF: u8 = b'P';
 const ERROR: u8 = b'E';
 const FONT: u8 = b'F';
@@ -145,6 +147,37 @@ impl<R: Read + Send, W: Write + Send> Caller for Connection<R, W> {
             return None;
         }
         frame.blobs.into_iter().next()
+    }
+
+    /// Asks with `Q`: the answer says which of `urls` are found, and holds their data in that
+    /// order. What an answer leaves out is not found.
+    fn resources(&self, id: u64, urls: &[&str]) -> Vec<Option<Vec<u8>>> {
+        let answer = || {
+            let mut channel = self.channel.lock().ok()?;
+            channel
+                .write(ASK_MANY, json!({ "id": id, "urls": urls }), &[])
+                .ok()?;
+            channel.read().ok()?.filter(|frame| frame.kind == RESOURCES)
+        };
+        let Some(frame) = answer() else {
+            return vec![None; urls.len()];
+        };
+        let mut found = frame
+            .header
+            .get("found")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten();
+        let mut blobs = frame.blobs.into_iter();
+        urls.iter()
+            .map(|_| {
+                if found.next() == Some(&Value::Bool(true)) {
+                    blobs.next()
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 
     /// Asks with `S`, `T` or `V`, and returns the data blocks of the answer.
@@ -340,6 +373,112 @@ mod tests {
                 .as_str()
                 .is_some_and(|message| !message.is_empty())
         );
+    }
+
+    /// The frames the worker writes for a document with two style sheets, one of them with a
+    /// font, which the caller answers with `answers`.
+    fn asked_for_many(ask_many: bool, answers: &[Vec<u8>]) -> Vec<Frame> {
+        let html = b"<link rel=stylesheet href=a.css><link rel=stylesheet href=b.css><p>Hallo</p>";
+        let mut header = json!({ "id": 7, "html": 0, "ask": true, "created": "2026-11-02T12:00:00Z" });
+        if ask_many {
+            header["askMany"] = Value::Bool(true);
+        }
+        let mut input = frame(RENDER, &header, &[html]);
+        for answer in answers {
+            input.extend(answer);
+        }
+        let output = Shared::default();
+        serve(engine(), io::Cursor::new(input), output.clone()).expect("served");
+        let output = output.0.lock().expect("lock").clone();
+        frames(&output)
+    }
+
+    const CSS: &[u8] = b"@font-face { font-family: Doc; src: url(font.ttf) } body { font-family: Doc }";
+
+    /// The codes of the diagnostics of an answer.
+    fn codes(frame: &Frame) -> Vec<&str> {
+        frame.header["diagnostics"]
+            .as_array()
+            .expect("diagnostics")
+            .iter()
+            .filter_map(|diagnostic| diagnostic["code"].as_str())
+            .collect()
+    }
+
+    fn kinds(frames: &[Frame]) -> String {
+        frames.iter().map(|frame| char::from(frame.kind)).collect()
+    }
+
+    #[test]
+    fn asks_for_many_resources_at_once() {
+        let font = std::fs::read(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../tests/fonts/Inter-Regular.ttf"
+        ))
+        .expect("font");
+        // The style sheets together, then the font of the one that was found.
+        let frames = asked_for_many(
+            true,
+            &[
+                frame(RESOURCES, &json!({ "found": [true, false] }), &[CSS]),
+                frame(RESOURCES, &json!({ "found": [true] }), &[&font]),
+            ],
+        );
+        assert_eq!(kinds(&frames), "HQQP");
+        assert_eq!(frames[1].header, json!({ "id": 7, "urls": ["a.css", "b.css"] }));
+        assert_eq!(frames[2].header, json!({ "id": 7, "urls": ["font.ttf"] }));
+        assert_eq!(codes(&frames[3]), ["resource.not-loaded"]);
+        let together = frames[3].blobs[0].clone();
+
+        // A caller that does not say `askMany` is asked for one after the other, and gets the
+        // same PDF.
+        let frames = asked_for_many(
+            false,
+            &[
+                frame(RESOURCE, &json!({ "found": true }), &[CSS]),
+                frame(RESOURCE, &json!({ "found": false }), &[]),
+                frame(RESOURCE, &json!({ "found": true }), &[&font]),
+            ],
+        );
+        assert_eq!(kinds(&frames), "H???P");
+        assert_eq!(frames[1].header, json!({ "id": 7, "url": "a.css" }));
+        assert_eq!(frames[2].header, json!({ "id": 7, "url": "b.css" }));
+        assert_eq!(frames[3].header, json!({ "id": 7, "url": "font.ttf" }));
+        assert_eq!(codes(&frames[4]), ["resource.not-loaded"]);
+        assert_eq!(frames[4].blobs[0], together);
+    }
+
+    #[test]
+    fn takes_what_an_answer_for_many_resources_leaves_out_as_not_found() {
+        // An answer of another type: nothing is found, and nothing asked for again.
+        let frames = asked_for_many(true, &[frame(RESOURCE, &json!({ "found": true }), &[CSS])]);
+        assert_eq!(kinds(&frames), "HQP");
+        assert_eq!(codes(&frames[2]), ["resource.not-loaded", "resource.not-loaded"]);
+        // Fewer answers than URLs, and no list at all.
+        for found in [json!({ "found": [false] }), json!({}), json!({ "found": true })] {
+            let frames = asked_for_many(true, &[frame(RESOURCES, &found, &[])]);
+            assert_eq!(kinds(&frames), "HQP", "{found}");
+            assert_eq!(
+                codes(&frames[2]),
+                ["resource.not-loaded", "resource.not-loaded"],
+                "{found}"
+            );
+        }
+        // Found, but without its data.
+        let frames = asked_for_many(true, &[frame(RESOURCES, &json!({ "found": [true, true] }), &[])]);
+        assert_eq!(kinds(&frames), "HQP");
+        assert_eq!(codes(&frames[2]), ["resource.not-loaded", "resource.not-loaded"]);
+        // The second of two, with the data of one: the font it names is asked for next.
+        let frames = asked_for_many(
+            true,
+            &[
+                frame(RESOURCES, &json!({ "found": [false, true] }), &[CSS]),
+                frame(RESOURCES, &json!({ "found": [] }), &[]),
+            ],
+        );
+        assert_eq!(kinds(&frames), "HQQP");
+        assert_eq!(frames[2].header, json!({ "id": 7, "urls": ["font.ttf"] }));
+        assert_eq!(codes(&frames[3]), ["resource.not-loaded", "resource.not-loaded"]);
     }
 
     #[test]

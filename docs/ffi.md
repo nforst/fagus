@@ -114,7 +114,8 @@ unnoticed.
 
 The library asks its caller nothing while it renders. A request with `ask: true`, or with a
 `signature` that has `certificates`, `timestamp` or `revocation`, is answered with an error
-(`` `ask` needs a caller that answers questions, and there is none ``). Resources come from the
+(`` `ask` needs a caller that answers questions, and there is none ``); `askMany` alone has no
+effect. Resources come from the
 request's `resources`, as `data:` URLs or as files of `base` and `root`; signatures with a PKCS#12
 file work. The answer has no `rss` and `maxRss`: the memory is that of your own process.
 

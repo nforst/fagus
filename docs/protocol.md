@@ -30,6 +30,8 @@ ends the worker with exit code 1 and the reason on its error output.
 | `R` render | caller → worker | the document, see below | HTML, stylesheets, resources, attachments, invoice XML |
 | `?` ask | worker → caller | `id`, `url` | – |
 | `r` resource | caller → worker | `found` | the resource, if found |
+| `Q` ask for many | worker → caller | `id`, `urls` | – |
+| `q` resources | caller → worker | `found` | the resources that were found, in the order of `urls` |
 | `P` PDF | worker → caller | `id`, `pages`, `diagnostics`, `timings`, `encrypted`, `signed`, `forms`, `layout`, `rss`, `maxRss` | the PDF |
 | `E` error | worker → caller | `id` (if known), `message`, `diagnostics`, `rss`, `maxRss` | – |
 | `F` font | caller → worker | – | a font file (TTF, OTF, TTC, WOFF, WOFF2) |
@@ -51,9 +53,11 @@ without `id`.
 
 The caller sends `R` and reads frames until it gets `P` or `E`. Meanwhile the worker may ask for
 resources it needs with `?`, if the request allows it (`ask`); the caller answers each one with
-`r`, with the data or `found: false`. A request with a `signature` of the caller's own signer may
-also bring `S` and `T`, and one with `revocation` brings `V` (see [Signatures](#signatures)),
-each answered with `s`, `t` or `v`. Nothing else may come in between.
+`r`, with the data or `found: false`. For a caller that says `askMany`, it asks for the resources
+it knows it needs with `Q`, many at once ([below](#many-resources-at-once)). A request with a
+`signature` of the caller's own signer may also bring `S` and `T`, and one with `revocation`
+brings `V` (see [Signatures](#signatures)), each answered with `s`, `t` or `v`. Nothing else may
+come in between.
 
 The header of `R`; fields other than `id` and `html` may be left out:
 
@@ -67,6 +71,7 @@ The header of `R`; fields other than `id` and `html` may be left out:
   "stylesheets": [{ "name": "app.css", "blob": 1 }],
   "resources": [{ "url": "logo.png", "blob": 2 }],
   "ask": true,
+  "askMany": true,
   "conformance": "3b",
   "tagged": true,
   "accessible": false,
@@ -96,6 +101,8 @@ The header of `R`; fields other than `id` and `html` may be left out:
 - `ask`: whether the worker asks for resources it does not have (`false` if left out). A resource
   is looked for as a `data:` URL, in `resources`, by asking the caller, then as a file, in that
   order. The worker asks once for each URL in a render.
+- `askMany`: whether the caller answers `Q`, a question for many resources at once (`false` if
+  left out); it needs `ask`. See [Many resources at once](#many-resources-at-once).
 - `conformance`: `1b`, `2b`, `2u`, `2a`, `3b`, `3u`, `3a`, `4`, `4e` or `4f` for PDF/A (see
   [pdf.md](pdf.md#write-pdfa)).
 - `tagged`: whether the PDF is tagged, with the logical structure of the document (`true` if
@@ -219,6 +226,41 @@ meet PDF/A or PDF/UA, or the PDF could not be written), it holds the diagnostics
 then, which often explain the failure; for a request the worker cannot use, an `F` it cannot read
 and a message of an unknown type, it is empty.
 
+### Many resources at once
+
+A caller that fetches resources from a slow place, such as the network, is faster when it gets
+many URLs at once and fetches them concurrently. With `ask` and `askMany` in `R`, the worker asks
+for the resources it knows it needs before it uses them with `Q`: the linked style sheets of the
+document, then the first font file of each `@font-face` rule, then the images.
+
+```json
+{ "id": 7, "urls": ["img/a.png", "https://cdn.example.com/b.jpg", "img/c.png"] }
+```
+
+The caller answers with `q`. Its `found` has `true` or `false` for each URL, in the order of
+`urls`, and its data blocks are the resources that were found, in that order:
+
+```json
+{ "found": [true, false, true], "blobs": [5120, 20431] }
+```
+
+- `urls` holds at most 64 URLs, each once; a document with more is asked again.
+- A URL that `found` leaves out, or whose data block is missing, is not found. The worker then
+  looks for a file, as after `r` with `found: false`, and asks for a URL with a fragment
+  (`icons.svg#check`) once more without it.
+- With `askMany`, the worker still asks with `?` for resources that only show while others are
+  read: the style sheets of `@import` rules, a later source of a font whose first could not be
+  loaded, the sprites and images of inline SVG, the documents of `<iframe>`s. A caller answers
+  both.
+- The URLs of `Q` are the ones `?` would ask for, in the same order, and the PDF is the same
+  bytes either way.
+- The [time limit](cli.md#limits) of the document is looked at after each answer, and the
+  [memory budget](cli.md#limits) is charged with the resources of an answer as it arrives.
+
+`askMany`, `Q` and `q` were added in 1.2.0. An older worker ignores `askMany` and asks with `?`
+alone; a worker never sends `Q` to a caller that did not say `askMany`. A caller therefore sets
+`askMany` whenever it can answer `Q`, and keeps answering `?`.
+
 ### Signatures
 
 The `signature` of `R` signs the PDF (PAdES, see [pdf.md](pdf.md#sign-the-pdf)), either with a
@@ -334,3 +376,4 @@ than that ignores them:
 | `rss`, `maxRss` | `P`, `E` | 1.0.0 |
 | `sandbox` | `H` | 1.0.0 |
 | `memoryBudget`, `timeLimit` | `R` | 1.0.0 |
+| `askMany`; the messages `Q`, `q` | `R` | 1.2.0 |

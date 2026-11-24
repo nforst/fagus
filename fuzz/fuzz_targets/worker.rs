@@ -55,6 +55,12 @@ enum Message {
         found: Option<bool>,
         data: Option<Vec<u8>>,
     },
+    /// The answer to a question for many resources (`q`): as many `found` and data blocks as
+    /// it happens to have, which need not fit the question or each other.
+    Resources {
+        found: Vec<Option<bool>>,
+        data: Vec<Vec<u8>>,
+    },
     /// Any type, with any header.
     Other {
         kind: u8,
@@ -89,6 +95,7 @@ struct Render {
     stylesheets: Vec<(String, u8)>,
     resources: Vec<(Word, u8)>,
     ask: bool,
+    ask_many: Option<bool>,
     conformance: Option<Word>,
     tagged: Option<bool>,
     accessible: bool,
@@ -187,6 +194,7 @@ impl Render {
                 .collect(),
         );
         map.insert("ask".to_owned(), Value::from(self.ask));
+        optional(&mut map, "askMany", self.ask_many.map(Value::from));
         optional(
             &mut map,
             "conformance",
@@ -278,6 +286,13 @@ fn stream(messages: &[Message]) -> Vec<u8> {
                 optional(&mut header, "found", found.map(Value::from));
                 let blobs: &[Vec<u8>] = data.as_ref().map_or(&[], std::slice::from_ref);
                 frame(&mut stream, b'r', Value::Object(header), blobs);
+            }
+            Message::Resources { found, data } => {
+                let found: Vec<Value> = found
+                    .iter()
+                    .map(|found| found.map_or(Value::Null, Value::from))
+                    .collect();
+                frame(&mut stream, b'q', json!({ "found": found }), data);
             }
             Message::Other { kind, header, blobs } => raw_frame(&mut stream, *kind, header.as_bytes(), blobs),
         }
