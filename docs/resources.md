@@ -397,8 +397,9 @@ diagnostics report the stylesheet as `resource.not-loaded`. A resolver can fetch
 1. Fagus asks the resolver for the stylesheet's URL, as written in the `<link>` or in an
    `@import url(…)`.
 2. The stylesheet's `@font-face` rules name the font files, on Google Fonts with URLs of
-   `https://fonts.gstatic.com/…`. Fagus asks the resolver for each file the text needs. Relative
-   URLs in the stylesheet resolve against the stylesheet's URL first, as in browsers.
+   `https://fonts.gstatic.com/…`. Fagus asks the resolver for the file of each rule, whether the
+   text uses it or not. Relative URLs in the stylesheet resolve against the stylesheet's URL
+   first, as in browsers.
 
 The resolver answers both kinds of URL, for the hosts you allow, with a timeout, and keeps what it
 fetched: Fagus asks again for every document.
