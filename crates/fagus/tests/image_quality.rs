@@ -387,3 +387,46 @@ fn writes_filtered_images_as_jpegs_and_gray_ones_with_one_component() {
     let blurred = pictures(&render(&document("filter: blur(4px)", Some(80))));
     assert!(blurred.iter().all(|picture| picture.filter == "FlateDecode"));
 }
+
+#[test]
+fn draws_a_jpeg_where_and_how_the_image_was_drawn() {
+    // What the pages draw is the same with a quality: only the image they name is another.
+    // `turned.avif` is turned by its `irot`, `orient6.jpg` by its EXIF orientation.
+    let drawn = |name: &str, quality: Option<u8>| {
+        let html = "<img src=i width=120 style='margin: 10px; object-fit: cover; height: 60px'>\
+                    <div style='width: 200px; height: 40px; background: url(i) center / contain'></div>";
+        let mut document = Document::html(html)
+            .resource("i", fixture(name))
+            .created(CREATED)
+            .tagged(false);
+        if let Some(quality) = quality {
+            document = document.image_quality(quality);
+        }
+        let pdf = render(&document);
+        let filters: Vec<String> = pictures(&pdf).into_iter().map(|picture| picture.filter).collect();
+        let pdf = Pdf::new(pdf).expect("a PDF hayro reads");
+        let content: Vec<Vec<u8>> = pdf
+            .pages()
+            .iter()
+            .map(|page| page.page_stream().expect("content").to_vec())
+            .collect();
+        (content, filters)
+    };
+    for (name, before) in [
+        ("media/avif/turned.avif", "FlateDecode"),
+        ("photo.webp", "FlateDecode"),
+        ("media/orient6.jpg", "DCTDecode"),
+    ] {
+        let (lossless, filters) = drawn(name, None);
+        assert!(
+            filters.iter().all(|filter| filter == before),
+            "{name}: {filters:?}"
+        );
+        let (jpeg, filters) = drawn(name, Some(80));
+        assert!(
+            filters.iter().all(|filter| filter == "DCTDecode"),
+            "{name}: {filters:?}"
+        );
+        assert_eq!(lossless, jpeg, "{name}");
+    }
+}
