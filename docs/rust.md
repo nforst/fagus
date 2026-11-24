@@ -84,7 +84,7 @@ document can be rendered with variations.
 | `root(impl Into<PathBuf>)` | A larger directory files may be read from, which contains the base directory; URLs starting with `/` resolve against it. It takes effect only with a base directory |
 | `stylesheet(name, css)` | A style sheet after the document's own; `name` appears in diagnostics |
 | `resource(url, Vec<u8>)` | The data of a resource, by its URL as written in the document |
-| `loader(Arc<dyn ResourceLoader>)` | A loader for resources that are not handed over; asked before a file is read |
+| `loader(Arc<dyn ResourceLoader>)` | A loader for resources that are not handed over; asked before a file is read, for [many at once](#load-many-resources-at-once) where it can fetch them concurrently |
 | `conformance(Conformance)` | PDF/A |
 | `tagged(bool)` | Whether the PDF is tagged (default `true`) |
 | `accessible()` | PDF/UA-1 |
@@ -182,6 +182,43 @@ with a fragment (`icons.svg#check`) it gets one more call without the fragment i
 called once for each URL in a render, whatever it returns. The
 loader must be `Send + Sync`: it is called from the engine's rendering thread. The documents of
 frames ask for their resources by their URLs resolved against the frame's URL.
+
+### Load many resources at once
+
+A render knows most of its resources before it uses them, and asks for them together with
+`load_many`: the linked style sheets of the document, then the first font file of each
+`@font-face` rule, then the images, at most `fagus::BATCH` (64) URLs at a time. The default
+implementation calls `load` for one after the other. A loader that fetches from a slow place
+implements it to fetch them concurrently:
+
+```rust
+impl ResourceLoader for Storage {
+    fn load(&self, url: &str) -> Option<Vec<u8>> {
+        self.fetch(url)
+    }
+
+    fn load_many(&self, urls: &[&str]) -> Vec<Option<Vec<u8>>> {
+        std::thread::scope(|scope| {
+            let fetches: Vec<_> = urls
+                .iter()
+                .map(|url| scope.spawn(move || self.fetch(url)))
+                .collect();
+            fetches
+                .into_iter()
+                .map(|fetch| fetch.join().ok().flatten())
+                .collect()
+        })
+    }
+}
+```
+
+The answers are in the order of `urls`; an answer shorter than `urls` leaves the rest not found.
+`load_many` is asked only for URLs that `load` would be asked for anyway, in the same order, so
+the PDF does not depend on which of the two a loader implements. Resources that only show while
+others are read still come to `load`: the style sheets of `@import` rules, a later source of a
+font whose first could not be loaded, the sprites and images of inline SVG, and the documents of
+`<iframe>`s. The time limit of a render is looked at after each batch. `load_many` is new in
+1.2.0.
 
 ## The output
 

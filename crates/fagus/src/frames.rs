@@ -245,7 +245,7 @@ fn frame_url(element: &fagus_dom::ElementData) -> Option<&str> {
 }
 
 /// Whether `text` starts with `prefix`, in any case.
-fn starts_with(text: &str, prefix: &str) -> bool {
+pub(crate) fn starts_with(text: &str, prefix: &str) -> bool {
     text.get(..prefix.len())
         .is_some_and(|start| start.eq_ignore_ascii_case(prefix))
 }

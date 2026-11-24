@@ -5,6 +5,10 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- Rust: `ResourceLoader::load_many(&[&str])` answers many URLs at once, so that a loader can fetch them concurrently. A render asks with it for the resources it knows before it uses them: the linked style sheets of a document, then the first font file of each `@font-face` rule, then the images, at most `fagus::BATCH` (64) URLs at a time. The default implementation calls `load` for one after the other, so an existing loader is asked for the same URLs as before, and the PDF is the same either way. `@import`ed style sheets, later sources of a font, the sprites of inline SVG and the documents of `<iframe>`s are still asked for one by one.
+
 ## [1.1.1] - 2026-11-25
 
 ### Changed

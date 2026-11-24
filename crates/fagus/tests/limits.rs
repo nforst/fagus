@@ -196,6 +196,33 @@ fn counts_the_time_a_loader_takes() {
 }
 
 #[test]
+fn counts_the_time_a_loader_takes_for_a_batch() {
+    // The limit is looked at after each batch a loader answers.
+    struct Slow(AtomicUsize);
+    impl ResourceLoader for Slow {
+        fn load(&self, _: &str) -> Option<Vec<u8>> {
+            None
+        }
+
+        fn load_many(&self, urls: &[&str]) -> Vec<Option<Vec<u8>>> {
+            self.0.fetch_add(1, Ordering::Relaxed);
+            std::thread::sleep(Duration::from_millis(150));
+            vec![None; urls.len()]
+        }
+    }
+    let html: String = (0..200).fold(String::new(), |mut html, index| {
+        write!(html, "<img src='{index}.png'>").expect("written");
+        html
+    });
+    let loader = Arc::new(Slow(AtomicUsize::new(0)));
+    let document = Document::html(html).loader(Arc::clone(&loader) as Arc<dyn ResourceLoader>);
+    let failure =
+        render(&document, Limits::new().time(Some(Duration::from_millis(100)))).expect_err("too slow");
+    assert!(matches!(failure.error, Error::TimeLimit { .. }));
+    assert_eq!(loader.0.load(Ordering::Relaxed), 1);
+}
+
+#[test]
 fn renders_the_same_bytes_within_the_limits() {
     let mut html = String::from(
         "<style>td { border: 1px solid; box-shadow: 0 0 4px red } .f { filter: blur(1px) }</style>\

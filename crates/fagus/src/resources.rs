@@ -18,7 +18,32 @@ pub trait ResourceLoader: Send + Sync {
     /// (`icons.svg#check`), a loader that returns `None` is asked again without the fragment.
     /// A render asks once for each URL, whatever the answer.
     fn load(&self, url: &str) -> Option<Vec<u8>>;
+
+    /// The data at each of `urls`, in their order: what [`Self::load`] answers for each. A render
+    /// asks with it for the resources it knows it needs before it uses them, at most
+    /// [`BATCH`](crate::BATCH) at a time: the linked style sheets of a document, then the fonts
+    /// of its `@font-face` rules, then its images. Implement it to fetch them concurrently. The
+    /// default calls [`Self::load`] for one after the other, so a loader without it sees the URLs
+    /// it saw before. An answer shorter than `urls` leaves the rest not found; what is not found
+    /// with a fragment is asked for again without it, as [`Self::load`] is. Resources that only
+    /// show while others are read (`@import`, a second source of a font whose first did not
+    /// load, the sprites of inline SVG, the documents of `<iframe>`s) are asked for with
+    /// [`Self::load`].
+    fn load_many(&self, urls: &[&str]) -> Vec<Option<Vec<u8>>> {
+        urls.iter()
+            .map(|url| {
+                let data = self.load(url);
+                // (The time limit of a render counts while its loader works.)
+                fagus_dom::budget::check_time_now();
+                data
+            })
+            .collect()
+    }
 }
+
+/// The most URLs a render asks a [`ResourceLoader`] for at once (see
+/// [`ResourceLoader::load_many`]); a document that needs more asks again.
+pub const BATCH: usize = 64;
 
 /// The data of a `data:` URL (RFC 2397), base64 or percent-encoded.
 pub(crate) fn data_url(url: &str) -> Option<Vec<u8>> {
@@ -178,6 +203,36 @@ impl Loaded {
             .unwrap_or_else(PoisonError::into_inner)
             .insert(url.to_owned(), answer.clone());
         answer
+    }
+
+    /// Whether the caller's loader was asked for `url` in this render.
+    pub(crate) fn was_asked(&self, url: &str) -> bool {
+        self.asked
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .contains_key(url)
+    }
+
+    /// Keeps what the caller's loader answered for `urls`, asked for together: `answers` in
+    /// their order, not found where there are fewer. Returns whether each was found.
+    pub(crate) fn answered(&self, urls: &[&str], answers: Vec<Option<Vec<u8>>>) -> Vec<bool> {
+        let mut answers = answers.into_iter();
+        urls.iter()
+            .map(|url| {
+                // Held, and charged to the budget, as it arrives.
+                let answer = answers
+                    .next()
+                    .flatten()
+                    .map(|data| self.held_once(Arc::new(data)));
+                let found = answer.is_some();
+                self.asked
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .entry((*url).to_owned())
+                    .or_insert(answer);
+                found
+            })
+            .collect()
     }
 
     /// The data of `file`, read once.

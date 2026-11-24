@@ -51,7 +51,7 @@ pub use fagus_pdf::{Attachment, Conformance, Date, Encryption, PdfError, Permiss
 pub use fagus_text::FontError;
 pub use layout_info::{Layout, LayoutBox, LayoutElement, LayoutPage, LayoutRow, RowSection};
 pub use limits::Limits;
-pub use resources::ResourceLoader;
+pub use resources::{BATCH, ResourceLoader};
 
 /// An error while rendering.
 #[derive(Debug, thiserror::Error)]
@@ -1434,6 +1434,14 @@ impl Inner {
             self.load(input, url)
                 .map(|css| quirky(String::from_utf8_lossy(&css).into_owned()))
         };
+        // The linked style sheets are asked for together.
+        self.preload(
+            input,
+            document
+                .descendants(fagus_dom::NodeId::DOCUMENT)
+                .filter_map(|node| document.element(node))
+                .filter_map(linked_stylesheet),
+        );
         for node in document.descendants(fagus_dom::NodeId::DOCUMENT) {
             let Some(element) = document.element(node) else {
                 continue;
@@ -1472,13 +1480,7 @@ impl Inner {
                         &mut import,
                     ));
                 }
-            } else if element.is("link")
-                && element.attribute("rel").is_some_and(|rel| {
-                    rel.split_ascii_whitespace()
-                        .any(|value| value.eq_ignore_ascii_case("stylesheet"))
-                })
-                && let Some(href) = element.attribute("href")
-            {
+            } else if let Some(href) = linked_stylesheet(element) {
                 match self.load(input, href) {
                     Some(css) => sheets.push(self.sheets.get_or_parse(
                         &String::from_utf8_lossy(&css),
@@ -1521,6 +1523,59 @@ impl Inner {
         // (The caller's loader may take its time.)
         fagus_dom::budget::check_time_now();
         Some(input.loaded.held_once(data?))
+    }
+
+    /// Asks the caller's loader for those of `urls` (as written in the document `input`) that
+    /// only it can answer and that it was not asked for yet, together (see
+    /// [`ResourceLoader::load_many`]), and keeps the answers for [`Self::load`]. The URLs must be
+    /// ones that are loaded next in any case, in that order: the loader is asked for nothing it
+    /// would not be asked for otherwise.
+    fn preload<'a>(&self, input: &Document, urls: impl IntoIterator<Item = &'a str>) {
+        let Some(loader) = &input.loader else {
+            return;
+        };
+        if input.nesting.opaque {
+            return;
+        }
+        let mut wanted: Vec<Cow<'a, str>> = Vec::new();
+        let mut seen = FxHashSet::default();
+        for url in urls {
+            let url = url.trim();
+            if url.is_empty() || frames::starts_with(url, "data:") {
+                continue;
+            }
+            let url = frames::resolve(&input.nesting.directory, url);
+            let resource = url.split_once('#').map_or(&*url, |(resource, _)| resource);
+            if input.resources.contains_key(&*url)
+                || input.resources.contains_key(resource)
+                || input.loaded.was_asked(&url)
+                || !seen.insert(url.clone())
+            {
+                continue;
+            }
+            wanted.push(url);
+        }
+        let ask = |urls: &[&str]| -> Vec<bool> {
+            let mut found = Vec::with_capacity(urls.len());
+            for urls in urls.chunks(BATCH) {
+                found.extend(input.loaded.answered(urls, loader.load_many(urls)));
+                // (The caller's loader may take its time.)
+                fagus_dom::budget::check_time_now();
+            }
+            found
+        };
+        let wanted: Vec<&str> = wanted.iter().map(AsRef::as_ref).collect();
+        let found = ask(&wanted);
+        // Without the fragment next, as each on its own is asked for.
+        let mut seen = FxHashSet::default();
+        let again: Vec<&str> = wanted
+            .iter()
+            .zip(found)
+            .filter(|(_, found)| !found)
+            .filter_map(|(url, _)| url.split_once('#').map(|(resource, _)| resource))
+            .filter(|resource| !input.loaded.was_asked(resource) && seen.insert(*resource))
+            .collect();
+        ask(&again);
     }
 
     /// Loads a resource as [`Self::load`] does, without looking for the same content loaded
@@ -1638,6 +1693,32 @@ impl Inner {
                     .map(palette_values::read)
                     .collect(),
             );
+        }
+        // The file each rule loads first is asked for with those of the others: the first source
+        // of a format Chrome reads, unless an installed face named before it is taken.
+        if input.loader.is_some() {
+            let first = rules.font_faces().iter().filter_map(|(rule, _)| {
+                let (descriptors, sources) = font_face::read(rule)?;
+                for source in sources {
+                    match source {
+                        Source::Local(name) => {
+                            let installed = self
+                                .fonts
+                                .local(&font_face::unquoted(name))
+                                .and_then(|(data, index)| Face::from_rule(data, index, &descriptors));
+                            if installed.is_some() {
+                                return None;
+                            }
+                        }
+                        Source::Url(source) if font_face::loads(source) => {
+                            return Some(source.url.url.as_ref());
+                        }
+                        Source::Url(_) => {}
+                    }
+                }
+                None
+            });
+            self.preload(input, first.collect::<Vec<&str>>());
         }
         for (rule, _) in rules.font_faces() {
             let Some((descriptors, sources)) = font_face::read(rule) else {
@@ -1829,6 +1910,16 @@ impl Inner {
             &mut images,
             diagnostics,
         );
+        // The images are asked for together: each file once, by the first URL that names it.
+        if input.loader.is_some() {
+            let mut resources = FxHashSet::default();
+            self.preload(
+                input,
+                urls.iter().copied().filter(|url| {
+                    resources.insert(url.split_once('#').map_or(*url, |(resource, _)| resource))
+                }),
+            );
+        }
         // Each URL once, though inherited properties name it in many styles.
         let mut tried = FxHashSet::default();
         let mut svg_bytes = 0;
@@ -2089,6 +2180,20 @@ impl Inner {
         // `<iframe>`, `<object>` and `<embed>` elements that show documents of their own.
         self.register_frames(input, document, &mut images);
         images
+    }
+}
+
+/// The URL of the style sheet that a `<link rel="stylesheet">` element links.
+fn linked_stylesheet(element: &fagus_dom::ElementData) -> Option<&str> {
+    if element.is("link")
+        && element.attribute("rel").is_some_and(|rel| {
+            rel.split_ascii_whitespace()
+                .any(|value| value.eq_ignore_ascii_case("stylesheet"))
+        })
+    {
+        element.attribute("href")
+    } else {
+        None
     }
 }
 
@@ -5430,6 +5535,193 @@ mod tests {
              <div class='card'>{images}<span>late</span></div>"
         );
         assert_eq!(asked(&late), ["logo.png", "missing.png", "paper.png", "late.png"]);
+    }
+
+    /// A loader of the files it holds, which records what it is asked for: `one` for a URL asked
+    /// for on its own, `many` for URLs asked for together. Without `together` it has no
+    /// `load_many` of its own.
+    struct Batches {
+        files: Vec<(&'static str, Vec<u8>)>,
+        together: bool,
+        /// How many of the answers to a batch it gives.
+        answers: usize,
+        asked: Mutex<Vec<String>>,
+    }
+
+    impl Batches {
+        fn new(together: bool) -> Self {
+            let font = std::fs::read(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../tests/fonts/Inter-Regular.ttf"
+            ))
+            .expect("font");
+            let css = "@font-face { font-family: Doc; src: url(font.ttf) }\
+                       @font-face { font-family: Other; src: url(missing.woff2), url(other.ttf) }\
+                       @font-face { font-family: Installed; src: local(\"Inter Regular\"), url(unused.ttf) }\
+                       body { font-family: Doc, Other } p { background: url(paper.png) }";
+            let sprite = "<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10'>\
+                          <view id='a' viewBox='0 0 5 5'/><rect width='10' height='10' fill='red'/></svg>";
+            let png = resources::data_url(PNG).expect("a PNG");
+            Self {
+                files: vec![
+                    ("style.css", css.as_bytes().to_vec()),
+                    ("font.ttf", font.clone()),
+                    ("other.ttf", font),
+                    ("logo.png", png.clone()),
+                    ("paper.png", png.clone()),
+                    ("small.png", png),
+                    ("sprite.svg", sprite.as_bytes().to_vec()),
+                ],
+                together,
+                answers: usize::MAX,
+                asked: Mutex::default(),
+            }
+        }
+
+        fn file(&self, url: &str) -> Option<Vec<u8>> {
+            self.files
+                .iter()
+                .find(|(name, _)| *name == url)
+                .map(|(_, data)| data.clone())
+        }
+
+        fn asked(&self) -> Vec<String> {
+            self.asked.lock().expect("not poisoned").clone()
+        }
+    }
+
+    impl ResourceLoader for Batches {
+        fn load(&self, url: &str) -> Option<Vec<u8>> {
+            self.asked
+                .lock()
+                .expect("not poisoned")
+                .push(format!("one {url}"));
+            self.file(url)
+        }
+
+        fn load_many(&self, urls: &[&str]) -> Vec<Option<Vec<u8>>> {
+            if !self.together {
+                return urls.iter().map(|url| self.load(url)).collect();
+            }
+            self.asked
+                .lock()
+                .expect("not poisoned")
+                .push(format!("many {}", urls.join(" ")));
+            urls.iter().take(self.answers).map(|url| self.file(url)).collect()
+        }
+    }
+
+    /// A document with resources of every kind that is asked for in batches, and some that are
+    /// not: a second source of a font, a source after an installed face, the candidates of a
+    /// `srcset` that are not chosen.
+    const BATCHED: &str = "<link rel=stylesheet href=style.css><link rel=stylesheet href=missing.css>\
+        <img src=logo.png alt=''><img src=small.png srcset='large.png 2x, huge.png 3x' alt=''>\
+        <img src='sprite.svg#a' alt=''><img src=sprite.svg alt=''><img src=logo.png alt=''>\
+        <img src=missing.png alt=''><p>Text</p>";
+
+    #[test]
+    fn asks_a_loader_for_the_resources_of_each_phase_together() {
+        let render = |document: Document| {
+            engine()
+                .render(&document.created(CREATED).tagged(false))
+                .expect("rendered")
+        };
+        let batched = Arc::new(Batches::new(true));
+        let together =
+            render(Document::html(BATCHED).loader(Arc::clone(&batched) as Arc<dyn ResourceLoader>));
+        // The style sheets, then the first file of each `@font-face` rule, then the images, each
+        // in the order of the document; what is not found with a fragment once more without it;
+        // the second source of a font only once the first is known to be missing.
+        assert_eq!(
+            batched.asked(),
+            [
+                "many style.css missing.css",
+                "many font.ttf missing.woff2",
+                "one other.ttf",
+                "many logo.png small.png sprite.svg#a missing.png paper.png",
+                "many sprite.svg",
+            ]
+        );
+        // A loader without `load_many` is asked for the same URLs, one by one.
+        let single = Arc::new(Batches::new(false));
+        let one_by_one =
+            render(Document::html(BATCHED).loader(Arc::clone(&single) as Arc<dyn ResourceLoader>));
+        let urls = |loader: &Batches| {
+            let mut urls: Vec<String> = loader
+                .asked()
+                .iter()
+                .flat_map(|asked| asked.split(' ').skip(1).map(str::to_owned).collect::<Vec<_>>())
+                .collect();
+            urls.sort();
+            urls
+        };
+        assert!(single.asked().iter().all(|asked| asked.starts_with("one ")));
+        assert_eq!(urls(&single), urls(&batched));
+        // The PDF is the same, and the same as with the resources handed over.
+        assert_eq!(codes(&together), codes(&one_by_one));
+        assert_eq!(together.pdf, one_by_one.pdf);
+        let mut handed = Document::html(BATCHED);
+        for (url, data) in &Batches::new(false).files {
+            handed = handed.resource(*url, data.clone());
+        }
+        let handed = render(handed);
+        assert_eq!(codes(&together), codes(&handed));
+        assert_eq!(together.pdf, handed.pdf);
+    }
+
+    #[test]
+    fn asks_for_what_a_batch_did_not_answer_no_more() {
+        // An answer shorter than the batch: the rest is not found, and not asked for again.
+        let loader = Arc::new(Batches {
+            answers: 1,
+            ..Batches::new(true)
+        });
+        let output = engine()
+            .render(&Document::html(BATCHED).loader(Arc::clone(&loader) as Arc<dyn ResourceLoader>))
+            .expect("rendered");
+        assert_eq!(
+            loader.asked(),
+            [
+                "many style.css missing.css",
+                "many font.ttf missing.woff2",
+                "one other.ttf",
+                "many logo.png small.png sprite.svg#a missing.png paper.png",
+                "many sprite.svg",
+            ]
+        );
+        assert_eq!(
+            codes(&output)
+                .iter()
+                .filter(|code| **code == "resource.not-loaded")
+                .count(),
+            // `missing.css`, `missing.woff2`, and all the images but `logo.png` and the sprite.
+            5
+        );
+    }
+
+    #[test]
+    fn asks_for_at_most_a_batch_of_urls_at_once() {
+        struct Sizes(Mutex<Vec<usize>>);
+        impl ResourceLoader for Sizes {
+            fn load(&self, _: &str) -> Option<Vec<u8>> {
+                None
+            }
+
+            fn load_many(&self, urls: &[&str]) -> Vec<Option<Vec<u8>>> {
+                self.0.lock().expect("not poisoned").push(urls.len());
+                vec![None; urls.len()]
+            }
+        }
+        let html = (0..150).fold(String::new(), |mut html, index| {
+            use std::fmt::Write as _;
+            let _ = write!(html, "<img src='{index}.png' alt=''>");
+            html
+        });
+        let loader = Arc::new(Sizes(Mutex::default()));
+        engine()
+            .render(&Document::html(html).loader(Arc::clone(&loader) as Arc<dyn ResourceLoader>))
+            .expect("rendered");
+        assert_eq!(*loader.0.lock().expect("not poisoned"), [BATCH, BATCH, 22]);
     }
 
     #[test]
