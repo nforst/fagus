@@ -4641,6 +4641,53 @@ mod tests {
     }
 
     #[test]
+    fn sets_text_without_a_family_in_the_first_family_added_or_inter() {
+        // What docs/fonts.md ("Set the generic families") says of an engine without the
+        // system's fonts.
+        let query =
+            |db: &FontDb, name: &str| family(db, db.query(&[name], 400.0, FontStyle::Normal)).to_owned();
+        let tests = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests");
+        let mut db = FontDb::new();
+        db.add_default_fonts();
+        // Without fonts of the caller, all is Inter: Fagus has no serif font.
+        for name in [
+            STANDARD,
+            "serif",
+            "sans-serif",
+            "system-ui",
+            "monospace",
+            "Unknown",
+        ] {
+            assert_eq!(query(&db, name), "Inter", "{name}");
+        }
+        // With fonts, the first family added stands for `serif`, `sans-serif` and families no
+        // font has, and so for text without a `font-family`.
+        db.add_font_file(&tests.join("corpus/quittio/fonts/Geist-Regular.ttf"))
+            .expect("font");
+        db.add_font_file(&tests.join("webfonts/STIXTwoMath-Regular.woff2"))
+            .expect("font");
+        for name in [STANDARD, "serif", "sans-serif", "system-ui", "Unknown"] {
+            assert_eq!(query(&db, name), "Geist", "{name}");
+        }
+        // `sans-serif` alone does not change the standard font, which is the `serif` family.
+        db.set_generic_families(GenericFamilies {
+            sans_serif: Some("Inter".to_owned()),
+            ..GenericFamilies::default()
+        });
+        assert_eq!(query(&db, "sans-serif"), "Inter");
+        assert_eq!(query(&db, "Unknown"), "Inter");
+        assert_eq!(query(&db, STANDARD), "Geist");
+        assert_eq!(query(&db, "serif"), "Geist");
+        db.set_generic_families(GenericFamilies {
+            serif: Some("STIX Two Math".to_owned()),
+            ..GenericFamilies::default()
+        });
+        assert_eq!(query(&db, STANDARD), "STIX Two Math");
+        assert_eq!(query(&db, "serif"), "STIX Two Math");
+        assert_eq!(query(&db, "sans-serif"), "Geist");
+    }
+
+    #[test]
     fn skips_the_ui_families_that_chrome_does_not_know() {
         let db = system_db(&[
             ("Times", "Inter-Regular.ttf"),
