@@ -82,6 +82,7 @@ The header of `R`; fields other than `id` and `html` may be left out:
   "created": "2026-11-02T12:00:00Z",
   "layout": true,
   "encryption": { "userPassword": "open sesame", "ownerPassword": "change me", "permissions": ["print", "copy"] },
+  "view": { "pageMode": "outlines", "pageLayout": "one-column", "zoom": "fit-width", "page": 1 },
   "memoryBudget": 1073741824,
   "timeLimit": 54000,
   "blobs": [5120, 812, 20431, 96, 4187]
@@ -146,6 +147,18 @@ The header of `R`; fields other than `id` and `html` may be left out:
   together with `accessible` it writes an encrypted PDF/UA file.
   Added in 1.0.0: an older worker ignores the field and writes the PDF unencrypted, which the
   caller notices by the missing `encrypted` in `P`.
+
+- `view`: how a viewer shows the PDF when it opens it (see
+  [pdf.md](pdf.md#choose-how-the-pdf-opens)); every field may be left out or be `null`.
+  `pageMode` is `none`, `outlines`, `thumbnails`, `full-screen`, `attachments` or `layers`;
+  `pageLayout` is `single-page`, `one-column`, `two-column-left`, `two-column-right`,
+  `two-page-left` or `two-page-right`; `zoom` is `fit-page`, `fit-width` or a number of percent
+  above 0; `page` is the page to open at, from 1; `fitWindow` and `centerWindow` are booleans
+  (`false` if left out). An unknown page mode or page layout and an invalid zoom are answered
+  with `E`. A page the document does not have, and a value PDF/A-1b lacks, are left out with
+  the diagnostic `pdf.view-ignored`.
+  Added in 1.2.0: an older worker ignores the field and writes the PDF without it. `P` does not
+  say whether the view was written, since the pages are the same either way.
 
 - `memoryBudget`: the memory budget of the document in bytes, `0` for none; the worker's
   (`--memory-budget`, else 2 GiB) if left out or `null`. `timeLimit`: its time limit in
@@ -383,3 +396,4 @@ than that ignores them:
 | `memoryBudget`, `timeLimit` | `R` | 1.0.0 |
 | `askMany`; the messages `Q`, `q` | `R` | 1.2.0 |
 | `imageQuality` | `R` | 1.2.0 |
+| `view` | `R` | 1.2.0 |

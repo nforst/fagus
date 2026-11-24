@@ -68,7 +68,7 @@ describes each one:
 
 `baseDirectory()`, `root()`, `stylesheet()`, `resource()`, `resolver()`, `resolveMany()`,
 `cache()`, `pdfA()`, `tagged()`, `accessible()`, `forms()`, `imageQuality()`, `attach()`,
-`facturX()`, `encrypt()`, `created()`, `sign()`, `strict()`, `reportLayout()`.
+`facturX()`, `encrypt()`, `initialView()`, `created()`, `sign()`, `strict()`, `reportLayout()`.
 
 `cache()` takes a cache store, which keeps what a resolver fetched for the next PDFs
 ([resources.md](resources.md#keep-what-a-resolver-fetched-with-cache)):

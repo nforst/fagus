@@ -60,6 +60,10 @@ file as HTML.
 | `--owner-password <PASSWORD>` | none | Encrypt the PDF with the password that lifts the restrictions of `--permissions`; also from `FAGUS_OWNER_PASSWORD` |
 | `--owner-password-file <FILE>` | none | Read the owner password from the first line of a file |
 | `--permissions <LIST>` | everything | What an encrypted PDF allows without the owner password, separated by commas: `print`, `print-low-quality`, `modify`, `copy`, `annotate`, `fill-forms`, `assemble`, or `none` |
+| `--page-mode <MODE>` | the viewer's | What a viewer shows beside the pages when it opens the PDF: `none`, `outlines`, `thumbnails`, `full-screen`, `attachments` or `layers` ([pdf.md](pdf.md#choose-how-the-pdf-opens)) |
+| `--page-layout <LAYOUT>` | the viewer's | How a viewer lays the pages out: `single-page`, `one-column`, `two-column-left`, `two-column-right`, `two-page-left` or `two-page-right` |
+| `--zoom <ZOOM>` | the viewer's | How large a viewer shows the pages: `fit-page`, `fit-width` or a number of percent, like `150` |
+| `--open-page <PAGE>` | 1 | The page a viewer opens the PDF at, from 1 |
 | `--created <DATE>` | now | The creation date, e.g. `2026-11-13T12:00:00Z` or `2026-11-13T14:00:00+02:00`, for reproducible files |
 | `--sign-p12 <FILE>` | none | Sign the PDF (PAdES) with the key and certificates of this PKCS#12 file; the password comes from `FAGUS_SIGN_PASSWORD` or `--sign-password-file` |
 | `--sign-password-file <FILE>` | none | A file whose first line is the password of the PKCS#12 file |

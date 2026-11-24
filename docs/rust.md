@@ -98,6 +98,7 @@ document can be rendered with variations.
 | `created(Date)` | The creation date (default: now), for reproducible output |
 | `report_layout(bool)` | Whether `Output::layout` reports where the elements with an `id` ended up (default `false`) |
 | `encrypt(Encryption)` | Protects the PDF with passwords (AES-256) |
+| `initial_view(InitialView)` | How a viewer shows the PDF when it opens it ([pdf.md](pdf.md#choose-how-the-pdf-opens)) |
 | `sign(Signature)` | Signs the PDF digitally (PAdES), see below |
 | `limits(Limits)` | The memory budget and time limit of this document, in place of the engine's |
 
@@ -124,6 +125,13 @@ The types they take:
   passwords. The keys come from the operating system; `seed([u8; 32])` takes them from a
   generator with that seed instead, so that tests can compare bytes (never in production: the
   seed decrypts the file).
+- `InitialView::new()` with `page_mode(…)`, `page_layout(…)`, `zoom(…)`, `page(…)` (from 1),
+  `fit_window(bool)` and `center_window(bool)`; what is not set is up to the viewer. `PageMode`
+  is `None`, `Outlines`, `Thumbnails`, `FullScreen`, `Attachments` or `Layers`; `PageLayout` is
+  `SinglePage`, `OneColumn`, `TwoColumnLeft`, `TwoColumnRight`, `TwoPageLeft` or `TwoPageRight`;
+  both have `from_name("one-column")` and `name()`. `Zoom` is `FitPage`, `FitWidth` or
+  `Percent(f32)`. What the document cannot have (a page beyond its last, a value PDF/A-1b lacks,
+  a zoom that is not above 0) is left out with a `pdf.view-ignored` diagnostic.
 - `Date` in UTC, with the public fields `year`, `month`, `day`, `hour`, `minute` and `second`.
   `Date::new(2026, 11, 1, 8, 0, 0)` (a `const fn`), `Date::now()` and
   `Date::from_unix(seconds)` make one; convert a local time to UTC before.
@@ -360,8 +368,8 @@ that uses it. So that a minor release can add a variant or a field, these types 
 `#[non_exhaustive]`:
 
 - the enums `Error`, `PdfError`, `FontError`, `Conformance`, `Relationship`, `FacturXProfile`,
-  `Permission`, `Algorithm`, `Certification`, `Placement` and `RowSection`: a `match` over one
-  needs a `_` arm;
+  `Permission`, `PageMode`, `PageLayout`, `Zoom`, `Algorithm`, `Certification`, `Placement` and
+  `RowSection`: a `match` over one needs a `_` arm;
 - the structs with public fields `Output`, `Timings`, `Failure`, `Diagnostic`, `Attachment`,
   `Date`, `RevocationRequest`, `Layout`, `LayoutPage`, `LayoutElement`, `LayoutBox` and
   `LayoutRow`: read their fields
@@ -371,7 +379,8 @@ that uses it. So that a minor release can add a variant or a field, these types 
 
 `Severity` is not: `Info`, `Warning` and `Error` are the severities of the command line and the
 worker protocol and stay the same within a major release. Which severity a diagnostic gets is not
-stable. `Document`, `Engine`, `Encryption`, `Signature` and `Limits` have no public fields. The
+stable. `Document`, `Engine`, `Encryption`, `InitialView`, `Signature` and `Limits` have no public
+fields. The
 traits `ResourceLoader`, `Signer`, `Timestamper` and `Revocation` get new methods only with a
 default implementation.
 

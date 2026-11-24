@@ -362,6 +362,34 @@ its keys are random. PDF/A forbids encryption: with `pdfA()` or `facturX()`, `re
 extract the text, as PDF/UA requires. The passwords are marked `#[\SensitiveParameter]`, so stack traces leave
 them out. See [pdf.md](pdf.md#protect-the-pdf-with-a-password).
 
+### `initialView(?PageMode $pageMode = null, ?PageLayout $pageLayout = null, Zoom|float|null $zoom = null, ?int $page = null, bool $fitWindow = false, bool $centerWindow = false): Document`
+
+How a viewer shows the PDF when it opens it. Every argument may be left out; what is left out is
+up to the viewer.
+
+- `$pageMode`: what the viewer shows beside the pages, a [`PageMode`](#pagemode-pagelayout-and-zoom).
+- `$pageLayout`: how it lays the pages out, a [`PageLayout`](#pagemode-pagelayout-and-zoom).
+- `$zoom`: `Zoom::FitPage`, `Zoom::FitWidth` or a number of percent (`100` is the actual size).
+- `$page`: the page the PDF opens at, from 1.
+- `$fitWindow`: the viewer sizes its window to the first page shown.
+- `$centerWindow`: the viewer centers its window on the screen.
+
+```php
+use Fagus\PageLayout;
+use Fagus\PageMode;
+use Fagus\Zoom;
+
+Fagus::html($html)->initialView(PageMode::Outlines, PageLayout::OneColumn, Zoom::FitWidth);
+Fagus::html($html)->initialView(zoom: 150, page: 3);
+Fagus::html($html)->facturX($xml)->initialView(PageMode::Attachments);
+```
+
+A zoom that is not above 0 and a page below 1 throw an `InvalidArgumentException`. A page the
+document does not have, and a page mode or page layout that PDF/A-1b lacks, are left out; the
+PDF then has a `pdf.view-ignored` diagnostic. Viewers follow these settings to different degrees,
+and browsers ignore most of them: see [pdf.md](pdf.md#choose-how-the-pdf-opens). A binary older
+than 1.2.0 ignores the view and writes the PDF without it.
+
 ### `created(DateTimeInterface $date): Document`
 
 The creation date written into the PDF; the current time by default. Fagus converts it to UTC. A
@@ -825,6 +853,38 @@ the owner password, for `encrypt()`:
 | `Permission::Annotate` | `'annotate'` | Adding and changing comments, and filling in forms |
 | `Permission::FillForms` | `'fill-forms'` | Filling in form fields |
 | `Permission::Assemble` | `'assemble'` | Inserting, deleting and rotating pages, changing bookmarks |
+
+## `PageMode`, `PageLayout` and `Zoom`
+
+String-backed enums for [`initialView()`](#initialviewpagemode-pagemode--null-pagelayout-pagelayout--null-zoomfloatnull-zoom--null-int-page--null-bool-fitwindow--false-bool-centerwindow--false-document).
+`Fagus\PageMode` is what a viewer shows beside the pages:
+
+| Case | Value | Shows |
+|---|---|---|
+| `PageMode::None` | `'none'` | Nothing but the pages |
+| `PageMode::Outlines` | `'outlines'` | The document outline (the bookmarks) |
+| `PageMode::Thumbnails` | `'thumbnails'` | The thumbnails of the pages |
+| `PageMode::FullScreen` | `'full-screen'` | The pages in full-screen mode |
+| `PageMode::Attachments` | `'attachments'` | The attachments; not in PDF/A-1b |
+| `PageMode::Layers` | `'layers'` | The layers; not in PDF/A-1b |
+
+`Fagus\PageLayout` is how it lays the pages out:
+
+| Case | Value | Layout |
+|---|---|---|
+| `PageLayout::SinglePage` | `'single-page'` | One page at a time |
+| `PageLayout::OneColumn` | `'one-column'` | One column, scrolling |
+| `PageLayout::TwoColumnLeft` | `'two-column-left'` | Two columns, scrolling, the odd pages on the left |
+| `PageLayout::TwoColumnRight` | `'two-column-right'` | Two columns, scrolling, the odd pages on the right |
+| `PageLayout::TwoPageLeft` | `'two-page-left'` | Two pages at a time, the odd pages on the left; not in PDF/A-1b |
+| `PageLayout::TwoPageRight` | `'two-page-right'` | Two pages at a time, the odd pages on the right; not in PDF/A-1b |
+
+`Fagus\Zoom` is a zoom that is no number of percent:
+
+| Case | Value | Zoom |
+|---|---|---|
+| `Zoom::FitPage` | `'fit-page'` | The whole page fits the window |
+| `Zoom::FitWidth` | `'fit-width'` | The width of the page fits the window |
 
 ## `Relationship`
 

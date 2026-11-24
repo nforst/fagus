@@ -112,6 +112,63 @@ Deeper levels nest under the entry before them. Elements in margin boxes make no
 entry with an empty title is left out. A document without entries has no outline, except in
 PDF/UA, which asks for one.
 
+## Choose how the PDF opens
+
+A PDF can say how a viewer shows it when it opens: what stands beside the pages, how the pages
+are laid out, how large they are, and on which page it starts. HTML and CSS have no way to say
+this, so it is an option of the document:
+
+```php
+use Fagus\PageLayout;
+use Fagus\PageMode;
+use Fagus\Zoom;
+
+// A manual: the outline beside the pages, scrolling in one column, as wide as the window.
+Fagus::html($html)->initialView(PageMode::Outlines, PageLayout::OneColumn, Zoom::FitWidth);
+
+// An invoice with its XML: the list of attachments open.
+Fagus::html($html)->facturX($xml)->initialView(PageMode::Attachments);
+
+// Slides: full screen, one whole page at a time.
+Fagus::html($html)->initialView(PageMode::FullScreen, PageLayout::SinglePage, Zoom::FitPage);
+```
+
+| Setting | Values | In the PDF |
+|---|---|---|
+| Page mode | `none`, `outlines`, `thumbnails`, `full-screen`, `attachments`, `layers` | `/PageMode`: the panel beside the pages, or full-screen mode |
+| Page layout | `single-page`, `one-column`, `two-column-left`, `two-column-right`, `two-page-left`, `two-page-right` | `/PageLayout`: one page at a time or scrolling, in one column or two; `left` and `right` say where the odd pages go, so `right` leaves the first page alone like a cover |
+| Zoom | `fit-page`, `fit-width` or a number of percent (100 is the actual size) | `/OpenAction`: a destination at the top of the page |
+| Page | a page number from 1 | `/OpenAction`: the page the PDF opens at; the first one without it |
+| Fit window | on or off | `/ViewerPreferences`: the viewer sizes its window to the first page shown |
+| Center window | on or off | `/ViewerPreferences`: the viewer centers its window on the screen |
+
+What is left out is not written, and the viewer decides. Without the option the PDF is the same,
+byte for byte, as before. Fagus does not open the outline on its own for a document with
+headings: say `outlines` where you want it.
+
+**Viewers follow this to different degrees.** These entries are wishes. Adobe Acrobat follows
+all of them, unless its user has set a default zoom or layout in the preferences or chose to
+reopen documents as they were left. The viewers built into Chrome, Edge and Firefox follow the
+page mode and the page to open at in part and ignore most of the rest; Preview on macOS ignores
+nearly all of it. Check with the viewers your readers use, and do not rely on the view for
+anything the reader must see.
+
+With standards and other options:
+
+- PDF/A-2, PDF/A-3, PDF/A-4 and PDF/UA-1 allow all of it. Under PDF/UA the viewer still shows
+  the title instead of the file name.
+- PDF/A-1b is PDF 1.4, which lacks the page modes `attachments` and `layers` and the page
+  layouts `two-page-left` and `two-page-right`. Fagus leaves such a value out and reports a
+  `pdf.view-ignored` warning; the rest of the view is written.
+- A page the document does not have is left out with the same warning, and the PDF opens at its
+  first page.
+- Encrypted and signed PDFs take the view like any other.
+
+The option is `initialView()` in [PHP](php.md#initialviewpagemode-pagemode--null-pagelayout-pagelayout--null-zoomfloatnull-zoom--null-int-page--null-bool-fitwindow--false-bool-centerwindow--false-document)
+and [Laravel](laravel.md#document-methods), `--page-mode`, `--page-layout`, `--zoom` and
+`--open-page` on the [command line](cli.md#render-an-html-file), `Document::initial_view` in
+[Rust](rust.md#documents) and `view` in the [worker protocol](protocol.md).
+
 ## Fill-in forms
 
 Chrome prints form controls as they look, and so does Fagus by default. With `forms()`, the
