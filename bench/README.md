@@ -185,6 +185,27 @@ Memory, 21 renders of one invoice by one engine (`run.py memory`, five rounds, m
 
 One process instead of two saves 3 to 7 MB of footprint (4 to 9 MB RSS), about what a second process costs on its own. What the engine needs moves into PHP's process, and stays there: on macOS the allocator keeps what the large documents freed ([above](#memory-a-worker-keeps)) in the PHP process instead of in a worker that the package can replace.
 
+## Remote resources (`resources/`)
+
+A document with 50 images at `https://` URLs, answered from PHP by a callback that waits 20 ms for each request, as a server some way off answers. `resolver()` is asked for one URL after the other and waits for each. `resolveMany()` gets the URLs of a batch together and waits once, as a callback does that fetches them concurrently (`Http::pool()`, `curl_multi`); the wait stands in for the network, so the numbers show what the engine and the protocol add, not what a real server does. The first row hands the images over with `resource()`, with nothing to fetch. The script checks that all three PDFs are the same bytes.
+
+```sh
+cargo build --release -p fagus-cli && composer install   # in the repository
+php bench/resources/bench.php                            # 50 images, 20 ms each
+php bench/resources/bench.php 500 20 3                   # images, milliseconds, renders
+FAGUS_BINARY=/path/to/fagus-1.1.0 php bench/resources/bench.php   # an older binary: the time before
+```
+
+Results of 2026-11-25 on an Apple M2 Pro, macOS 27, PHP 8.5, on a busy machine (milliseconds, the median of 5 renders in a warm worker):
+
+| | `resource()` | `resolver()` | `resolveMany()` | Calls of `resolveMany()` |
+|---|--:|--:|--:|--:|
+| 50 images, binary of 1.1.0 | 10.1 | 1,515 | 1,329 | 50 |
+| 50 images | 4.7 | 1,245 | 32.4 | 1 |
+| 500 images (median of 3) | 33.4 | 11,327 | 211 | 8 |
+
+A binary of 1.1.0 knows no batches and asks `resolveMany()` for each URL on its own, as it asks `resolver()`. With batches, the 50 images cost one wait of 20 ms and about 10 ms more than handing them over; 500 images come in 8 batches of at most 64.
+
 ## Fagus
 
 ```sh
