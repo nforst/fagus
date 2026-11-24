@@ -5,6 +5,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-11-25
+
 ### Changed
 
 - The Composer plugin warns when it installs the binary for a development version of the package (a branch such as `dev-main`): a branch lists the binaries of the last release, so the binary is that release's and may not know what the branch added. The installation succeeds as before, also with `FAGUS_INSTALL_STRICT`; build the binary from the branch and set `FAGUS_BINARY` to use it.
@@ -168,7 +170,8 @@ The first release: a native engine that turns HTML and CSS into PDF the way Chro
 - No network access and no scripts: resources come only from `data:` URLs, the caller and files inside the document's root directory.
 - Limits on nesting, grids, frames, images and the size of substituted values, so that hostile documents render in bounded time and memory, and a panic becomes an error instead of ending the caller. The engine has no `unsafe` code of its own.
 
-[Unreleased]: https://github.com/nforst/fagus/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/nforst/fagus/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/nforst/fagus/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/nforst/fagus/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/nforst/fagus/compare/v0.2.0...v1.0.0
 [0.2.0]: https://github.com/nforst/fagus/compare/v0.1.0...v0.2.0
