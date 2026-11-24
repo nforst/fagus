@@ -130,6 +130,9 @@ pub struct Document {
     created: Option<Date>,
     /// Whether to report where the elements ended up (see [`Document::report_layout`]).
     report_layout: bool,
+    /// Whether to keep the parsed document and the pages (see [`Document::inspect`]).
+    #[cfg(feature = "inspect")]
+    inspect: bool,
     encryption: Option<Encryption>,
     /// How a viewer shows the PDF when it opens it, if the document says.
     initial_view: Option<InitialView>,
@@ -256,6 +259,8 @@ impl Document {
             factur_x_attachment: None,
             created: None,
             report_layout: false,
+            #[cfg(feature = "inspect")]
+            inspect: false,
             encryption: None,
             initial_view: None,
             signature: None,
@@ -289,6 +294,16 @@ impl Document {
     #[must_use]
     pub fn report_layout(mut self, report: bool) -> Self {
         self.report_layout = report;
+        self
+    }
+
+    /// Whether to keep the parsed document and the pages as they are painted, after every layout
+    /// pass, in [`Output::inspection`]: for the checks of `fagus-invariants`, not part of the API.
+    #[cfg(feature = "inspect")]
+    #[doc(hidden)]
+    #[must_use]
+    pub fn inspect(mut self, inspect: bool) -> Self {
+        self.inspect = inspect;
         self
     }
 
@@ -621,6 +636,22 @@ pub struct Output {
     /// Where the elements with an `id` ended up, if the document asked for it with
     /// [`Document::report_layout`].
     pub layout: Option<Layout>,
+    /// The parsed document and its pages, if the document asked for them with
+    /// [`Document::inspect`].
+    #[cfg(feature = "inspect")]
+    #[doc(hidden)]
+    pub inspection: Option<Inspection>,
+}
+
+/// What a render laid out: the parsed document and the pages that are painted, after every
+/// layout pass (container queries, `target-counter()`, shrinking to fit, frames). For the checks
+/// of `fagus-invariants`; the types are those of other crates and change in any release.
+#[cfg(feature = "inspect")]
+#[doc(hidden)]
+#[derive(Clone, Debug)]
+pub struct Inspection {
+    pub document: fagus_dom::Document,
+    pub pages: Vec<fagus_layout::Page>,
 }
 
 /// The rendering engine. It keeps fonts, the parsed user agent stylesheet and the faces of
@@ -1222,6 +1253,11 @@ impl Inner {
         let layout = input
             .report_layout
             .then(|| layout_info::collect(&document, &pages));
+        #[cfg(feature = "inspect")]
+        let inspection = input.inspect.then(|| Inspection {
+            document: document.clone(),
+            pages: pages.clone(),
+        });
         let mut controls = if input.forms {
             forms::controls(&document, &styled, conformance.is_none())
         } else {
@@ -1476,6 +1512,8 @@ impl Inner {
             diagnostics,
             timings,
             layout,
+            #[cfg(feature = "inspect")]
+            inspection,
         })
     }
 
@@ -4983,6 +5021,34 @@ mod tests {
             streams.contains("0 0 1 rg"),
             "the container in the wider layout: {streams}"
         );
+    }
+
+    #[cfg(feature = "inspect")]
+    #[test]
+    fn keeps_the_document_and_the_pages_of_the_last_layout_only_when_asked() {
+        // The content is wider than the page area: it is laid out again to shrink, and the pages
+        // kept are those of that layout.
+        let html = "<!DOCTYPE html><style>@page { size: 400px 300px; margin: 20px } body { margin: 0 }</style>\
+                    <div id=wide style='width: 450px; height: 500px'>wide</div>";
+        let document = Document::html(html).created(CREATED);
+        let plain = engine().render(&document).expect("rendered");
+        assert!(plain.inspection.is_none());
+        let output = engine().render(&document.inspect(true)).expect("rendered");
+        assert_eq!(output.pdf, plain.pdf);
+        let inspection = output.inspection.expect("inspection");
+        assert_eq!(inspection.pages.len(), output.pages);
+        assert_eq!(output.pages, 2);
+        assert!(inspection.pages.iter().all(|page| page.scale < 1.0));
+        let wide = inspection
+            .document
+            .descendants(inspection.document.document_element().expect("root"))
+            .find(|&node| {
+                inspection
+                    .document
+                    .element(node)
+                    .is_some_and(|element| element.id.as_deref() == Some("wide"))
+            });
+        assert!(wide.is_some());
     }
 
     #[test]

@@ -30,6 +30,10 @@ rustc-hash.workspace = true
 default = ["parallel"]
 # Writes the PDF on a pool of threads (see the feature of fagus-pdf).
 parallel = ["fagus-pdf/parallel"]
+# Keeps the parsed document and the laid-out pages of a render for the checks of
+# crates/fagus-invariants. Not part of the API: it shows the types of other crates, which change
+# in any release.
+inspect = []
 
 [dev-dependencies]
 flate2.workspace = true
