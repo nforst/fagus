@@ -1,6 +1,7 @@
 //! Decodes arbitrary image data (PNG, JPEG, GIF, WebP, BMP, TIFF, AVIF) as the image of an
 //! element, a background, a mask, a border image, an image in SVG and an image whose pixels a
-//! filter changes.
+//! filter changes. Data of an odd length is written with an image quality (1 to 100, from the
+//! length), so that the JPEG encoder sees the decoded pixels too.
 #![no_main]
 
 use fagus::Document;
@@ -13,5 +14,9 @@ const HTML: &str = "<img src=i><img src=i style='width: 30px; image-orientation:
     <svg width=20 height=20><image href=i width=20 height=20 /></svg>";
 
 fuzz_target!(|data: &[u8]| {
-    fagus_fuzz::render(&Document::html(HTML).resource("i", data.to_vec()));
+    let mut document = Document::html(HTML).resource("i", data.to_vec());
+    if data.len() % 2 == 1 {
+        document = document.image_quality((data.len() / 2 % 100 + 1) as u8);
+    }
+    fagus_fuzz::render(&document);
 });

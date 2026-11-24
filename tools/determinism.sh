@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Renders every page of the corpus twice with the same creation date, plain, as PDF/UA-1 and as
-# PDF/A-3u (the invoices also as PDF/A-3a, PDF/UA-1 and Factur-X), once in a new engine and once
-# in a warm one, and fails unless both renders give the same bytes (or Fagus refuses both). Writes the SHA-256 of each file to OUT_DIR/SHA256SUMS, so that the files of different
+# PDF/A-3u (the invoices also as PDF/A-3a, PDF/UA-1 and Factur-X; the pages with raster images
+# also with their images as JPEGs, --image-quality 80, plain and as PDF/A-1b), once in a new
+# engine and once in a warm one, and fails unless both renders give the same bytes (or Fagus refuses both). Writes the SHA-256 of each file to OUT_DIR/SHA256SUMS, so that the files of different
 # machines can be compared:
 #
 #   tools/determinism.sh OUT_DIR
@@ -40,6 +41,12 @@ for page in "$root"/tests/corpus/*.html "$root"/tests/corpus/*/*.html; do
   echo "plain $name $page"
   echo "ua $name $page"
   echo "3u $name $page"
+  # With an image quality, where there are raster images it could apply to: the JPEG encoder
+  # must write the same bytes everywhere too.
+  if grep -qiE '\.(png|jpe?g|gif|webp|avif|bmp|tiff?)([^a-z]|$)|data:image/' "$page"; then
+    echo "q80 $name $page"
+    echo "1b-q80 $name $page"
+  fi
 done > "$out/renders.txt"
 for page in "$root"/tests/corpus/invoice/*.html; do
   echo "factur-x-ua $(basename "$page" .html) $page"
@@ -51,6 +58,8 @@ render() { # variant name page
   case $1 in
     plain) ;;
     ua) options=(--accessible) ;;
+    q80) options=(--image-quality 80) ;;
+    1b-q80) options=(--pdfa 1b --image-quality 80) ;;
     factur-x-ua) options=(--pdfa 3a --accessible --factur-x "$xml") ;;
     *) options=(--pdfa "$1") ;;
   esac

@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Renders the corpus plain, encrypted, as PDF/A (1b, 2a, 2b, 2u, 3a, 3b, 3u, 4, 4e, 4f), as PDF/UA-1
-# (also encrypted, once without and once with a user password) and as Factur-X invoices, the invoices also signed (with the test keys of tests/signing), and checks
+# (also encrypted, once without and once with a user password) and as Factur-X invoices, the invoices also signed (with the test keys of tests/signing), the pages with raster images
+# also with their images as JPEGs (--image-quality 80: plain, as PDF/A-1b, 2b and 3u and as
+# PDF/UA-1), and checks
 # the files: every one with `qpdf --check` (https://qpdf.sourceforge.io), the signatures with
 # `openssl cms -verify` (tests/signing/verify.py),
 # the PDF/A and PDF/UA files with veraPDF (https://verapdf.org) against the profile of the level
@@ -135,6 +137,11 @@ for page in "${pages[@]}"; do
   for variant in plain encrypted 1b 2a 2b 2u 3a 3b 3u 4 4e 4f ua ua-encrypted ua-password; do
     echo "$variant $name $page"
   done
+  if grep -qiE '\.(png|jpe?g|gif|webp|avif|bmp|tiff?)([^a-z]|$)|data:image/' "$page"; then
+    for variant in q80 1b-q80 2b-q80 3u-q80 ua-q80; do
+      echo "$variant $name $page"
+    done
+  fi
 done > "$out/renders.txt"
 for page in "$root"/tests/corpus/invoice/*.html; do
   name=factur-x-$(basename "$page" .html)
@@ -152,6 +159,9 @@ render() { # variant name page
     plain) ;;
     encrypted) options=(--user-password user --owner-password owner --permissions print,copy) ;;
     ua) options=(--accessible) ;;
+    q80) options=(--image-quality 80) ;;
+    ua-q80) options=(--accessible --image-quality 80) ;;
+    *-q80) options=(--pdfa "${1%-q80}" --image-quality 80) ;;
     ua-encrypted) options=(--accessible --owner-password owner --permissions print) ;;
     ua-password) options=(--accessible --user-password user --owner-password owner --permissions print,copy) ;;
     factur-x) options=(--pdfa 3b --factur-x "$xml") ;;
@@ -178,7 +188,7 @@ while read -r variant name _; do
   pdf=$pdfs/$name.$variant.pdf
   if [[ ! -f $pdf ]]; then
     log=$pdfs/$name.$variant.log
-    if [[ $variant != plain && $variant != encrypted ]] && grep -q '^Error: the document does not meet ' "$log"; then
+    if [[ $variant != plain && $variant != encrypted && $variant != q80 ]] && grep -q '^Error: the document does not meet ' "$log"; then
       echo "refused as $variant: $name: $(grep -m 1 '^Error: ' "$log" | sed 's/^Error: the document does not meet //')" >> "$out/refused.txt"
     else
       echo "not written as $variant: $name:"
@@ -189,8 +199,9 @@ while read -r variant name _; do
   fi
   echo "$pdf" >> "$out/files.all"
   case $variant in
-    plain | encrypted) ;;
-    ua | ua-encrypted) echo "$pdf" >> "$out/files.ua1" ;;
+    plain | encrypted | q80) ;;
+    ua | ua-encrypted | ua-q80) echo "$pdf" >> "$out/files.ua1" ;;
+    *-q80) echo "$pdf" >> "$out/files.${variant%-q80}" ;;
     ua-password)
       # veraPDF reads it decrypted, so qpdf checks the permission PDF/UA asks for (7.16).
       decrypted=${pdf%.pdf}.decrypted.pdf

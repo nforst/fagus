@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Photos</title>
+<style>
+@font-face { font-family: Brand; src: url(../fonts/Inter-Bold.ttf); }
+@font-face { font-family: Inter; src: url(../fonts/Inter-Regular.ttf); font-weight: 400; }
+@page { size: A4; margin: 10mm; }
+body { margin: 0; font: 9pt/1.4 Inter, sans-serif; color: #111; }
+h1 { font: 16pt Brand; margin: 0 0 3mm; }
+.row { display: flex; gap: 4mm; margin-bottom: 4mm; }
+figure { margin: 0; width: 60mm; font-size: 7pt; }
+figure img { display: block; width: 60mm; }
+.checked { background: repeating-conic-gradient(#e2e8f0 0 25%, #fff 0 50%) 0 0 / 4mm 4mm; }
+.gray { filter: grayscale(1); }
+.cover { height: 30mm; margin-bottom: 4mm; background: url(images/photo.webp) center / cover no-repeat; }
+</style></head>
+<body>
+<h1>Photos, charts and transparency</h1>
+<!-- With --image-quality, the photos become JPEGs; the chart, which is smaller without loss, and
+     the image with transparent pixels stay as they are, and the JPEG is embedded as it is. -->
+<div class="row">
+<figure><img src="images/photo.webp" alt="A landscape, lossy WebP">WebP (VP8), opaque</figure>
+<figure><img src="images/photo.png" alt="A landscape, PNG">PNG, opaque</figure>
+<figure><img src="images/photo.jpg" alt="A photo, JPEG">JPEG</figure>
+</div>
+<div class="row">
+<figure><img src="images/lossless.webp" alt="A bar chart, lossless WebP">WebP (VP8L), a chart</figure>
+<figure class="checked"><img src="images/alpha.webp" alt="A landscape in an oval">WebP with alpha</figure>
+<figure><img src="images/media/photo.avif" alt="A photo, AVIF">AVIF</figure>
+</div>
+<div class="row">
+<figure><img class="gray" src="images/photo.webp" alt="A landscape in gray">filter: grayscale(1)</figure>
+<figure><img src="images/media/cmyk.jpg" alt="A CMYK image">CMYK JPEG without a profile</figure>
+</div>
+<div class="cover"></div>
+</body></html>
