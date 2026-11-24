@@ -498,6 +498,15 @@ argument for the case that the string is set several times on a page:
 `string()` also works in the generated content of the document, such as a table footer that shows a
 subtotal per page (see [Extensions](extensions.md)).
 
+Page counters in a string are those of the page the element is on that set it, wherever the string
+shows: in a margin box and in `string()` in the content, on the same page and on the pages after.
+This goes for `counter(page)`, `counter(-fagus-next-page)` and `counter(-fagus-previous-page)`;
+`counter(pages)` is the page count in a margin box and 0 in the content, as it is there without a
+string (see [Number the pages](#number-the-pages)). This is how Fagus reads the specification, which says
+that a string gets its value where the box of its element starts, and leaves open which page a
+page counter in it counts ([csswg-drafts #4740](https://github.com/w3c/csswg-drafts/issues/4740)).
+Other engines may show the number of the page that shows the string.
+
 ## Control page breaks
 
 ```html

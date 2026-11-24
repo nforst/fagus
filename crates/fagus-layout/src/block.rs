@@ -690,6 +690,10 @@ pub struct Layouter<'a> {
     /// Where `string()` in generated content takes its value from in the string log, while the
     /// rows of a table's header or footer are laid out for one page; `None` elsewhere.
     pub(crate) string_position: std::cell::Cell<Option<usize>>,
+    /// The page (from 1) each assignment in the string log is made on, 0 until the page it is
+    /// on is laid out: the page counters in the value of a named string count that page (see
+    /// `Layouter::string_page`).
+    pub(crate) string_pages: RefCell<Vec<usize>>,
     /// The definite content height of the block container whose lines are being laid out, which
     /// percentage heights of replaced elements in them refer to.
     pub(crate) inline_containing_height: std::cell::Cell<Option<Au>>,
@@ -996,6 +1000,7 @@ impl<'a> Layouter<'a> {
                 .keys()
                 .any(|&id| tree.get(id).style.float_reference == fagus_style::values::FloatReference::Column),
             string_position: std::cell::Cell::new(None),
+            string_pages: RefCell::new(vec![0; tree.string_log.len()]),
             inline_containing_height: std::cell::Cell::new(None),
             intrinsic_height: std::cell::Cell::new(None),
             height_for_widths: std::cell::Cell::new(None),

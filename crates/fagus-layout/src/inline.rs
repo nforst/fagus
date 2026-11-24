@@ -2703,22 +2703,22 @@ fn generated_text(layouter: &Layouter<'_>, item: &InlineItem) -> Option<String> 
         }
         InlineItem::NamedString { name, position, .. } => {
             let position = layouter.string_position.get().unwrap_or(*position);
-            // Page counters in the value count the page it shows on.
+            // Page counters in the value count the page of the element that set it, as in the
+            // margin boxes (see `page::Marks::counted`): an earlier page, or else this one, whose
+            // assignments have no page yet.
             let values = layouter.page_values.borrow();
+            let (here, total) = layouter.page_number.get();
             Some(
                 layouter
                     .tree
                     .string_at(name, position)
-                    .map_or_else(String::new, |value| {
+                    .map_or_else(String::new, |(at, value)| {
+                        let page = match layouter.string_pages.borrow().get(at) {
+                            Some(&page) if (1..here).contains(&page) => page,
+                            _ => here,
+                        };
                         value.resolve(
-                            |counter| {
-                                crate::tree::page_counter_value(
-                                    counter,
-                                    layouter.page_number.get(),
-                                    &values,
-                                    None,
-                                )
-                            },
+                            |counter| crate::tree::page_counter_value(counter, (page, total), &values, None),
                             &layouter.tree.counter_styles,
                         )
                     }),

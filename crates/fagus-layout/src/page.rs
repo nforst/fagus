@@ -1228,7 +1228,15 @@ pub fn paginate(
         fagus_dom::budget::check_time_now();
         counts.push(count);
         let mut page_marks = Marks::default();
-        page_marks.collect(tree, &content, &mut false);
+        // (Where the page's assignments are in the string log, for `string()` in the content of
+        // this page and the pages after.)
+        let mut logged = Vec::new();
+        page_marks.collect(tree, &content, &mut false, &mut logged);
+        let mut string_pages = layouter.string_pages.borrow_mut();
+        for at in logged {
+            string_pages[at] = pages.len() + 1;
+        }
+        drop(string_pages);
         marks.push(page_marks);
         // The page area in the coordinates of the writing mode the content is laid out in.
         logical.push((inline, page_block));
@@ -1959,8 +1967,15 @@ struct Marks<S = String> {
 
 impl Marks<StringValue> {
     /// Collects the assignments in a page's fragments, before the placeholders of running
-    /// elements are cleared. `content_seen` tells whether text or images came before.
-    fn collect(&mut self, tree: &BoxTree, fragment: &Fragment, content_seen: &mut bool) {
+    /// elements are cleared. `content_seen` tells whether text or images came before; `logged`
+    /// takes where the string log has each assignment to a named string.
+    fn collect(
+        &mut self,
+        tree: &BoxTree,
+        fragment: &Fragment,
+        content_seen: &mut bool,
+        logged: &mut Vec<usize>,
+    ) {
         match &fragment.kind {
             // Only the first fragment of an element assigns; a box continued from the previous
             // page did so there.
@@ -1971,7 +1986,11 @@ impl Marks<StringValue> {
             } if sides.top && sides.left => {
                 let leading = tree.leading_strings.get(node).into_iter().flatten();
                 for element in leading.chain(std::iter::once(node)) {
-                    for (name, value) in tree.strings.get(element).into_iter().flatten() {
+                    let values = tree.strings.get(element).into_iter().flatten();
+                    if let Some(&start) = tree.string_starts.get(element) {
+                        logged.extend(start..start + values.clone().count());
+                    }
+                    for (name, value) in values {
                         self.strings.push(Assignment {
                             name: Arc::clone(name),
                             value: value.clone(),
@@ -1994,7 +2013,7 @@ impl Marks<StringValue> {
             _ => {}
         }
         for child in &fragment.children {
-            self.collect(tree, child, content_seen);
+            self.collect(tree, child, content_seen, logged);
         }
         // Elements with `display: none` after the last box assign where the root element ends.
         if let FragmentKind::Box {
@@ -2006,6 +2025,8 @@ impl Marks<StringValue> {
             && !tree.trailing_strings.is_empty()
             && tree.root.and_then(|root| tree.get(root).node) == Some(*node)
         {
+            let end = tree.string_log.len();
+            logged.extend(end - tree.trailing_strings.len()..end);
             for (name, value) in &tree.trailing_strings {
                 self.strings.push(Assignment {
                     name: Arc::clone(name),

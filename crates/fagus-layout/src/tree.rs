@@ -315,6 +315,8 @@ pub struct BoxTree {
     /// Every assignment to a named string, in document order: where `string()` in the content of
     /// an element finds its value.
     pub(crate) string_log: Vec<(Arc<str>, StringValue)>,
+    /// Where the assignments of each element in [`Self::strings`] start in the string log.
+    pub(crate) string_starts: FxHashMap<NodeId, usize>,
     /// The named strings of elements without a box of their own after the last element with
     /// one, assigned where the root element ends.
     pub(crate) trailing_strings: Vec<(Arc<str>, StringValue)>,
@@ -486,12 +488,15 @@ impl BoxTree {
     }
 
     /// The value of the named string `name` at `position` in the string log: the last one
-    /// assigned before it, or nothing.
-    pub(crate) fn string_at(&self, name: &str, position: usize) -> Option<&StringValue> {
+    /// assigned before it, with where the log has it, or nothing.
+    pub(crate) fn string_at(&self, name: &str, position: usize) -> Option<(usize, &StringValue)> {
         let positions = self.string_index.get(name)?;
         match positions.partition_point(|&assigned| assigned < position) {
             0 => None,
-            count => Some(&self.string_log[positions[count - 1]].1),
+            count => {
+                let at = positions[count - 1];
+                Some((at, &self.string_log[at].1))
+            }
         }
     }
 
@@ -803,6 +808,7 @@ impl BoxTree {
                 ids: std::cell::OnceCell::new(),
                 strings: RefCell::default(),
                 string_log: RefCell::default(),
+                string_starts: RefCell::default(),
                 deferred_strings: RefCell::default(),
                 parent: std::cell::Cell::default(),
                 anonymous_tables: RefCell::default(),
@@ -839,6 +845,7 @@ impl BoxTree {
                 .extend(tree.trailing_strings.iter().cloned());
             tree.strings = builder.strings.take();
             tree.string_log = builder.string_log.take();
+            tree.string_starts = builder.string_starts.take();
             tree.found = Targets {
                 pages: FxHashMap::default(),
                 counters: builder.snapshots.map(RefCell::into_inner).unwrap_or_default(),
@@ -1212,6 +1219,8 @@ struct Builder<'a> {
     strings: RefCell<NamedStrings>,
     /// The same assignments in document order.
     string_log: RefCell<Vec<(Arc<str>, StringValue)>>,
+    /// Where the assignments of each element start in the string log.
+    string_starts: RefCell<FxHashMap<NodeId, usize>>,
     /// The named strings of elements without a box of their own (`display: none` or
     /// `contents`, line breaks) since the last element with one, which the next one assigns
     /// (see `defer_strings`).
@@ -2493,7 +2502,9 @@ impl Builder<'_> {
             return;
         }
         if !values.is_empty() {
-            self.string_log.borrow_mut().extend(values.iter().cloned());
+            let mut log = self.string_log.borrow_mut();
+            self.string_starts.borrow_mut().insert(element, log.len());
+            log.extend(values.iter().cloned());
             self.strings.borrow_mut().insert(element, values);
         }
     }

@@ -475,6 +475,114 @@ mod tests {
         assert_eq!(margin_text(&pages[2]), "Zwei, 10 of III|");
     }
 
+    /// The lines of the content of each page.
+    fn content_lines(pages: &[Page]) -> Vec<Vec<String>> {
+        pages
+            .iter()
+            .map(|page| {
+                let mut out = Vec::new();
+                line_texts(&page.fragments[0], &mut out);
+                out
+            })
+            .collect()
+    }
+
+    #[test]
+    fn counts_page_counters_in_named_strings_in_the_content_on_the_page_of_the_element() {
+        // `string()` in the content shows the page counters as the margin boxes do: with the
+        // values of the page the heading is on, also two pages after it and where a page resets
+        // the counter. (The page count is not known while the content is laid out.)
+        let pages = render(
+            "<style>
+               @page { size: 400px 300px; margin: 0; @top-left { content: string(chapter); } }
+               @page :nth(3) { counter-reset: page 10; }
+               body { margin: 0; font: 10px/20px Inter }
+               h2 { margin: 0; font: inherit; break-before: page;
+                    string-set: chapter content() ', ' counter(page, upper-roman) ' after '
+                                counter(-fagus-previous-page) ' of ' counter(pages); }
+               p { margin: 0 } p::before { content: string(chapter) }
+               .break { break-before: page; }
+             </style>
+             <p></p>
+             <h2>Eins</h2><p></p>
+             <h2>Zwei</h2><p></p>
+             <p class=break></p>
+             <p class=break></p>",
+        );
+        assert_eq!(
+            content_lines(&pages),
+            [
+                vec![""],
+                vec!["Eins", "Eins, II after 1 of 0"],
+                vec!["Zwei", "Zwei, X after 2 of 0"],
+                vec!["Zwei, X after 2 of 0"],
+                vec!["Zwei, X after 2 of 0"],
+            ]
+        );
+        // The margin boxes show the same, with the page count.
+        assert_eq!(margin_text(&pages[4]), "Zwei, X after 2 of 5|");
+    }
+
+    #[test]
+    fn counts_page_counters_in_named_strings_set_on_the_page_that_shows_them() {
+        // The element that sets the string is on the page that shows it: the counters are those
+        // of that page, for the string of a box that starts there and for the one of a box that
+        // goes on from the page before.
+        let pages = render(
+            "<style>
+               @page { size: 400px 300px; margin: 0 }
+               body { margin: 0; font: 10px/20px Inter }
+               div { string-set: part 'Part ' counter(page) }
+               h2 { margin: 0; font: inherit;
+                    string-set: chapter content() ' ' counter(page) ' before ' counter(-fagus-next-page); }
+               p { margin: 0 } p::before { content: string(part) ', ' string(chapter) }
+               .break { break-before: page; }
+             </style>
+             <div><h2>Eins</h2><p></p>
+             <h2 class=break>Zwei</h2><p></p></div>",
+        );
+        assert_eq!(
+            content_lines(&pages),
+            [
+                vec!["Eins", "Part 1, Eins 1 before 2"],
+                vec!["Zwei", "Part 1, Zwei 2 before 3"],
+            ]
+        );
+    }
+
+    #[test]
+    fn counts_page_counters_in_named_strings_in_repeated_table_rows_on_the_page_of_the_element() {
+        use std::fmt::Write;
+        let mut rows = String::new();
+        for n in 1..=30 {
+            write!(rows, "<tr data-n=\"{n}\"><td>Position {n}</td></tr>").expect("written");
+        }
+        // The header shows the chapter with the page it starts on, on every page of the table;
+        // the row carried over shows the last row of the page before with that page, the footer
+        // the last row above it with this page.
+        let pages = render(&format!(
+            "<style>@page {{ size: 400px 300px; margin: 0 }} body {{ margin: 0; font: 10px/20px Inter }}
+               table {{ border-spacing: 0 }} td, th {{ padding: 0; font-weight: normal; text-align: left }}
+               h2 {{ margin: 0; font: inherit; string-set: chapter content() ' from ' counter(page) }}
+               tbody tr {{ string-set: row attr(data-n) ' on ' counter(page) }}
+               th::before {{ content: string(chapter) }}
+               .carry {{ -fagus-repeat: at-break }}
+               .carry td::before, tfoot td::before {{ content: string(row) }}</style>
+             <h2>Eins</h2>
+             <table><thead><tr><th></th></tr><tr class=carry><td></td></tr></thead>
+             <tfoot><tr><td></td></tr></tfoot>
+             <tbody>{rows}</tbody></table>"
+        ));
+        let lines = content_lines(&pages);
+        assert_eq!(pages.len(), 3);
+        assert_eq!(lines[0][..3], ["Eins", "Eins from 1", "Position 1"]);
+        assert_eq!(lines[0][lines[0].len() - 2..], ["Position 12", "12 on 1"]);
+        assert_eq!(lines[1][..3], ["Eins from 1", "12 on 1", "Position 13"]);
+        assert_eq!(lines[1][lines[1].len() - 2..], ["Position 24", "24 on 2"]);
+        assert_eq!(lines[2][..3], ["Eins from 1", "24 on 2", "Position 25"]);
+        assert_eq!(lines[2][lines[2].len() - 2..], ["Position 30", "30 on 3"]);
+    }
+
     #[test]
     fn assigns_the_named_strings_of_elements_without_a_box() {
         // An element with `display: none` sets its strings where its box would be: where the
