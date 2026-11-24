@@ -197,6 +197,72 @@ Storage::put("invoices/{$invoice->number}.pdf", $pdf->bytes());
 
 The underlying `Fagus\Document`, for code that works with the plain PHP API.
 
+## Put a Blade partial in the header and footer
+
+A header or footer is part of the document: include the partial at the start of the `<body>`, take
+it out of the flow with `position: running()` and show it in a margin box with `element()`. Fagus
+then repeats it on every page. There is no method for it, as CSS says it all.
+
+```blade
+{{-- resources/views/pdf/header.blade.php --}}
+<header class="pdf-header">
+  <strong>{{ config('app.name') }}</strong>
+  <span>Invoice {{ $invoice->number }}</span>
+</header>
+```
+
+```blade
+{{-- resources/views/pdf/footer.blade.php --}}
+<footer class="pdf-footer">
+  <span>{{ $invoice->customer->name }}</span>
+  <span class="pdf-page"></span>
+</footer>
+```
+
+```blade
+{{-- resources/views/invoices/show.blade.php --}}
+<!doctype html>
+<html lang="en">
+<head>
+  <title>Invoice {{ $invoice->number }}</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 30mm 18mm 22mm;
+      @top-center { content: element(header); }
+      @bottom-center { content: element(footer); }
+    }
+    body { font-family: sans-serif; }
+    .pdf-header { position: running(header); }
+    .pdf-footer { position: running(footer); font-size: 8pt; }
+    .pdf-header, .pdf-footer { display: flex; justify-content: space-between; width: 100%; }
+    .pdf-page::after { content: "Page " counter(page) " of " counter(pages); }
+  </style>
+</head>
+<body>
+  @include('pdf.header')
+  @include('pdf.footer')
+
+  <h1>Invoice {{ $invoice->number }}</h1>
+  …
+</body>
+</html>
+```
+
+```php
+return Fagus::view('invoices.show', ['invoice' => $invoice])->name('invoice.pdf');
+```
+
+- Include both partials before the content: a running element shows from the page it is on.
+- The partials see the variables of the view, and inherit the fonts and styles of the document.
+- They sit in the page margins: make the top and bottom margins of `@page` high enough for them.
+- The page number comes from `counter(page)` in generated content, as the header and footer are
+  laid out again on every page.
+
+[paged-media.md](paged-media.md#put-html-in-the-header-and-footer) describes running elements in
+full, and [margin boxes](paged-media.md#add-a-header-and-a-footer) for headers and footers of plain
+text.
+
 ## Queues
 
 Render PDFs in a job when they take long or when nobody waits for them:
