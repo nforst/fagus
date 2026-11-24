@@ -60,6 +60,14 @@ final class PendingPdf implements Responsable
         return $this->with($this->document->resolver($resolver));
     }
 
+    /**
+     * @param  callable(list<string>): array<string, string>  $resolver
+     */
+    public function resolveMany(callable $resolver): self
+    {
+        return $this->with($this->document->resolveMany($resolver));
+    }
+
     public function pdfA(Conformance|string $level = Conformance::PdfA3b): self
     {
         return $this->with($this->document->pdfA($level));

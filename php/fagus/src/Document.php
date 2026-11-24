@@ -11,6 +11,7 @@ use DateTimeZone;
 use Fagus\Exception\InvalidArgumentException;
 use Fagus\Exception\RenderException;
 use SensitiveParameter;
+use TypeError;
 
 /**
  * A document to render. Every method returns a changed copy; the document itself never changes.
@@ -29,6 +30,9 @@ final class Document
 
     /** @var (Closure(string): ?string)|null */
     private ?Closure $resolver = null;
+
+    /** @var (Closure(list<string>): array<string, string>)|null */
+    private ?Closure $manyResolver = null;
 
     private ?Conformance $conformance = null;
 
@@ -128,7 +132,8 @@ final class Document
      * Answers requests for resources that are not handed over with {@see self::resource()}: the
      * callback gets the URL as written in the document and returns the data, or null. It is
      * asked before a file is looked for; after null, the file inside the base directory (or
-     * root) is read. Fagus itself never goes to the network.
+     * root) is read. Fagus itself never goes to the network. It replaces a resolver set with
+     * {@see self::resolveMany()}.
      *
      * @param  callable(string): ?string  $resolver
      */
@@ -136,6 +141,25 @@ final class Document
     {
         $copy = clone $this;
         $copy->resolver = $resolver(...);
+        $copy->manyResolver = null;
+
+        return $copy;
+    }
+
+    /**
+     * Answers requests for resources as {@see self::resolver()} does, many at once: the callback
+     * gets the URLs the engine asks for together (the linked stylesheets, then the fonts, then
+     * the images of a document, at most 64 at a time) and returns the data of those it has, by
+     * URL. A URL it leaves out is not found. That lets it fetch them concurrently. It replaces a
+     * resolver set with {@see self::resolver()}.
+     *
+     * @param  callable(list<string>): array<string, string>  $resolver
+     */
+    public function resolveMany(callable $resolver): self
+    {
+        $copy = clone $this;
+        $copy->manyResolver = $resolver(...);
+        $copy->resolver = null;
 
         return $copy;
     }
@@ -391,7 +415,12 @@ final class Document
 
             return count($blobs) - 1;
         };
-        $header = ['id' => $id, 'html' => 0, 'ask' => $this->resolver !== null];
+        $header = ['id' => $id, 'html' => 0, 'ask' => $this->resolver !== null || $this->manyResolver !== null];
+        if ($header['ask']) {
+            // The engine may ask for many resources at once (`Q`); a binary older than that
+            // asks for one after the other.
+            $header['askMany'] = true;
+        }
         if ($this->xhtml) {
             $header['xhtml'] = true;
         }
@@ -470,7 +499,42 @@ final class Document
      */
     public function resolve(string $url): ?string
     {
-        return $this->resolver === null ? null : ($this->resolver)($url);
+        return $this->resolveAll([$url])[0];
+    }
+
+    /**
+     * The data of the resources the engine asks for at once, in the order of the URLs; null for
+     * one that is not found.
+     *
+     * @param  list<string>  $urls
+     * @return list<?string>
+     *
+     * @internal
+     */
+    public function resolveAll(array $urls): array
+    {
+        $found = [];
+        if ($this->manyResolver !== null && $urls !== []) {
+            $answers = ($this->manyResolver)($urls);
+            if (! is_array($answers)) {
+                throw new TypeError('The callback of resolveMany() must return an array of data by URL, '.get_debug_type($answers).' returned.');
+            }
+            foreach ($urls as $url) {
+                if (! isset($answers[$url])) {
+                    continue;
+                }
+                if (! is_string($answers[$url])) {
+                    throw new TypeError("The callback of resolveMany() must return the data of `{$url}` as a string, ".get_debug_type($answers[$url]).' returned.');
+                }
+                $found[$url] = $answers[$url];
+            }
+        } elseif ($this->resolver !== null) {
+            foreach ($urls as $url) {
+                $found[$url] ??= ($this->resolver)($url);
+            }
+        }
+
+        return array_map(static fn (string $url): ?string => $found[$url] ?? null, $urls);
     }
 
     /**

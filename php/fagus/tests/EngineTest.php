@@ -183,6 +183,26 @@ final class EngineTest extends TestCase
         $this->assertEquals(['timeLimit' => 0, 'memoryBudget' => 0], $limits(new Engine($this->fake(), memoryBudget: 0, timeLimit: 0.0)));
     }
 
+    #[Test]
+    public function it_answers_a_worker_that_asks_for_one_resource_after_the_other(): void
+    {
+        // A binary older than `askMany` ignores it and asks with `?`: a resolver for many gets
+        // each URL on its own.
+        $engine = new Engine($this->binaries[] = FakeWorker::create(version: Release::VERSION, ask: ['a.png', 'b.png', 'c.png']));
+        $asked = [];
+        $pdf = Document::html('<p>x</p>')->resolveMany(function (array $urls) use (&$asked): array {
+            $asked[] = $urls;
+
+            return array_intersect_key(['a.png' => 'A', 'c.png' => 'C'], array_flip($urls));
+        })->render($engine);
+
+        $this->assertSame([['a.png'], ['b.png'], ['c.png']], $asked);
+        $this->assertSame(['a.png' => 'A', 'b.png' => null, 'c.png' => 'C'], FakeWorker::answers($pdf->bytes()));
+
+        // Without a resolver the document does not allow questions.
+        $this->assertSame([], FakeWorker::answers(Document::html('<p>x</p>')->render($engine)->bytes()));
+    }
+
     /**
      * Renders `$count` documents and returns the process and the number of each in its process.
      *

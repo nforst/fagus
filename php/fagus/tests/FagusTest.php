@@ -28,6 +28,7 @@ use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
+use TypeError;
 
 /**
  * Runs against the fagus binary in FAGUS_BINARY, or the release build of this repository.
@@ -378,6 +379,116 @@ final class FagusTest extends TestCase
 
         $this->assertNotSame($document, $strict);
         $this->assertSame([], $document->render()->diagnostics());
+    }
+
+    #[Test]
+    public function it_asks_a_resolver_for_many_resources_at_once(): void
+    {
+        $html = '<link rel=stylesheet href=a.css><link rel=stylesheet href=b.css><link rel=stylesheet href=handed.css>'
+            .'<img src=1.svg><img src=2.svg><img src=1.svg><img src=missing.svg><p>x</p>';
+        $files = [
+            'a.css' => 'p { aus-a: 1; background: url(3.svg) }',
+            'b.css' => 'p { aus-b: 1 }',
+            '1.svg' => '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="red"/></svg>',
+            '2.svg' => '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="blue"/></svg>',
+            '3.svg' => '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="lime"/></svg>',
+        ];
+        $document = Fagus::html($html)->resource('handed.css', 'p { color: black }')->created(new DateTimeImmutable('2026-11-02T12:00:00Z'));
+
+        // The stylesheets together, then the images, each URL once; what was handed over is
+        // not asked for.
+        $batches = [];
+        $many = $document->resolveMany(function (array $urls) use (&$batches, $files): array {
+            $batches[] = $urls;
+
+            return array_intersect_key($files, array_flip($urls));
+        })->render();
+        $this->assertSame([['a.css', 'b.css'], ['1.svg', '2.svg', 'missing.svg', '3.svg']], $batches);
+
+        // A resolver for one URL is asked for the same URLs in the same order, and the PDF is
+        // the same.
+        $asked = [];
+        $single = $document->resolver(function (string $url) use (&$asked, $files): ?string {
+            $asked[] = $url;
+
+            return $files[$url] ?? null;
+        })->render();
+        $this->assertSame(array_merge(...$batches), $asked);
+        $this->assertSame($single->bytes(), $many->bytes());
+        $this->assertSame(array_map(strval(...), $single->diagnostics()), array_map(strval(...), $many->diagnostics()));
+        $messages = implode("\n", array_map(strval(...), $many->diagnostics()));
+        $this->assertStringContainsString('aus-a', $messages);
+        $this->assertStringContainsString('aus-b', $messages);
+        $this->assertStringContainsString('image `missing.svg` could not be loaded', $messages);
+
+        // The last of `resolver()` and `resolveMany()` is the one that is asked.
+        $which = [];
+        $document
+            ->resolveMany(function (array $urls) use (&$which): array {
+                $which[] = 'many';
+
+                return [];
+            })
+            ->resolver(function (string $url) use (&$which): ?string {
+                $which[] = 'one';
+
+                return null;
+            })
+            ->render();
+        $this->assertSame(['one'], array_values(array_unique($which)));
+        $which = [];
+        $document
+            ->resolver(function (string $url) use (&$which): ?string {
+                $which[] = 'one';
+
+                return null;
+            })
+            ->resolveMany(function (array $urls) use (&$which): array {
+                $which[] = 'many';
+
+                return [];
+            })
+            ->render();
+        $this->assertSame(['many'], array_values(array_unique($which)));
+    }
+
+    #[Test]
+    public function it_asks_for_many_resources_in_batches(): void
+    {
+        $images = implode('', array_map(static fn (int $index): string => "<img src='{$index}.png'>", range(1, 150)));
+        $sizes = [];
+        Fagus::html($images)->resolveMany(function (array $urls) use (&$sizes): array {
+            $sizes[] = count($urls);
+
+            return [];
+        })->render();
+
+        $this->assertSame([64, 64, 22], $sizes);
+    }
+
+    #[Test]
+    public function it_recovers_when_the_resolver_for_many_fails(): void
+    {
+        $document = Fagus::html('<img src="bild.png">')->resolveMany(function (): array {
+            throw new RuntimeException('Kein Zugriff');
+        });
+
+        try {
+            $document->render();
+            $this->fail('No exception from the resolver.');
+        } catch (RuntimeException $exception) {
+            $this->assertSame('Kein Zugriff', $exception->getMessage());
+        }
+        $this->assertSame(1, Fagus::html('<p>Weiter</p>')->render()->pages(), 'a new worker takes over');
+
+        // An answer that is not data by URL is refused, not taken as nothing found.
+        try {
+            Fagus::html('<img src="bild.png">')->resolveMany(fn (array $urls): array => ['bild.png' => 42])->render();
+            $this->fail('No exception for data that is not a string.');
+        } catch (TypeError $exception) {
+            $this->assertSame('The callback of resolveMany() must return the data of `bild.png` as a string, int returned.', $exception->getMessage());
+        }
+        $this->assertSame(1, Fagus::html('<p>Weiter</p>')->render()->pages());
     }
 
     #[Test]

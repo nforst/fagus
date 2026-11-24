@@ -172,8 +172,35 @@ Fagus::html($html)->resolver(function (string $url): ?string {
 });
 ```
 
-Fagus itself never goes to the network. A resolver may, under your own rules. Only one resolver
-is kept; a second call replaces the first.
+Fagus itself never goes to the network. A resolver may, under your own rules
+([resources.md](resources.md#remote-images-through-the-resolver-with-a-host-allowlist)). Only one
+resolver is kept; a second call replaces the first, and one set with `resolveMany()`.
+
+### `resolveMany(callable $resolver): Document`
+
+Sets a callback that answers requests for many resources at once, so that it can fetch them
+concurrently. It gets the URLs Fagus asks for together, a list of strings, and returns the data of
+those it has as an array by URL; a URL it leaves out is not found, and Fagus tries the file, as
+after `null` from `resolver()`.
+
+```php
+Fagus::html($html)->resolveMany(function (array $urls): array {
+    return $media->findMany($urls);   // ['img/a.png' => '…', 'img/b.png' => '…']
+});
+```
+
+Fagus asks for the resources it knows before it uses them: the linked stylesheets of the
+document, then the first font file of each `@font-face` rule, then the images, each URL once and
+at most 64 in one call. Resources that only show while others are read come one at a time, as a
+list of one URL: the stylesheets of `@import` rules, a later source of a font whose first could
+not be loaded, the sprites and images of inline SVG, the documents of `<iframe>`s. The callback
+gets the same URLs in the same order as one set with `resolver()`, and the PDF is the same.
+
+`resolver()` and `resolveMany()` replace each other: the one called last is asked. A callback
+that returns something other than an array, or data that is not a string, ends the render with a
+`TypeError`. [resources.md](resources.md#answer-many-requests-at-once-with-resolvemany) has
+callbacks for Laravel's `Http::pool()` and for `curl_multi`. New in 1.2.0; with a binary older
+than that, the callback gets every URL on its own.
 
 ### `pdfA(Conformance|string $level = Conformance::PdfA3b): Document`
 

@@ -141,6 +141,15 @@ final class Engine
                         $resource = $document->resolve((string) ($reply['url'] ?? ''));
                         $channel->write('r', ['found' => $resource !== null], $resource === null ? [] : [$resource]);
                         break;
+                    case 'Q':
+                        $urls = array_values(array_filter((array) ($reply['urls'] ?? []), is_string(...)));
+                        $resources = $document->resolveAll($urls);
+                        $channel->write(
+                            'q',
+                            ['found' => array_map(static fn (?string $resource): bool => $resource !== null, $resources)],
+                            array_values(array_filter($resources, static fn (?string $resource): bool => $resource !== null)),
+                        );
+                        break;
                     case 'S':
                         $signature = $document->signature() ?? throw EngineException::unexpected($kind);
                         $channel->write('s', [], [$signature->signDigest($data[0] ?? '', (string) ($reply['algorithm'] ?? ''))]);
