@@ -50,4 +50,4 @@ Packagist lists the package from `https://github.com/nforst/fagus` and updates i
 "repositories": [{ "type": "vcs", "url": "https://github.com/nforst/fagus" }]
 ```
 
-A development version has no pinned binaries, so the plugin installs none; set `FAGUS_BINARY` to a binary built from the same commit.
+A branch keeps the pinned binaries of the last release: the plugin installs that release's binary and warns that it may not know what the branch added. Set `FAGUS_BINARY` to a binary built from the same commit. Only a copy whose `Release::BINARIES` is empty has no binary to install.

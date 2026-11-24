@@ -8,6 +8,7 @@ use Composer\Composer;
 use Composer\EventDispatcher\EventSubscriberInterface;
 use Composer\EventDispatcher\ScriptExecutionException;
 use Composer\IO\IOInterface;
+use Composer\Package\AliasPackage;
 use Composer\Plugin\PluginInterface;
 use Composer\Script\ScriptEvents;
 use Fagus\Exception\FagusException;
@@ -23,6 +24,9 @@ use Fagus\Internal\Release;
  * With `FAGUS_INSTALL_STRICT=1` in the environment, or `"extra": {"fagus": {"install-strict":
  * true}}` in the root composer.json, Composer fails instead, so that a deployment stops there
  * and not at the first PDF. `FAGUS_INSTALL_STRICT=0` turns the setting of composer.json off.
+ *
+ * A development version of the package (a branch such as `dev-main`) gets the binary of the last
+ * release, which the branch pins, with a warning: the binary may not know what the branch added.
  *
  * @internal
  */
@@ -64,7 +68,11 @@ final class Plugin implements EventSubscriberInterface, PluginInterface
         if (Release::BINARIES === []) {
             $strict = $this->strict();
             if ($strict !== null) {
-                $this->fail(InstallException::developmentVersion(Release::VERSION), $strict);
+                $this->fail(
+                    InstallException::developmentVersion(Release::VERSION),
+                    $strict,
+                    'Set FAGUS_INSTALL_STRICT=0 where FAGUS_BINARY names a binary of your own.',
+                );
             }
             $this->io->write('fagus: a development version, without binaries to install.', true, IOInterface::VERBOSE);
 
@@ -79,6 +87,15 @@ final class Plugin implements EventSubscriberInterface, PluginInterface
                 cacheDirectory: is_string($cache) && $cache !== '' ? $cache.'/fagus' : null,
             ))->install($directory.'/php/fagus/bin');
             $this->io->write("fagus: the binary is installed at {$path}.", true, IOInterface::VERBOSE);
+            // An alias (`dev-main as 1.1.0`) has the stability of the version it stands for.
+            $installed = $package instanceof AliasPackage ? $package->getAliasOf() : $package;
+            if ($installed->isDev()) {
+                $this->io->writeError(
+                    "<warning>fagus: nforst/fagus is installed as a development version ({$installed->getPrettyVersion()}). "
+                    .'The binary is the one of release '.Release::VERSION.' and may not know what the branch added. '
+                    .'Build it from the branch with `cargo build --release` and set FAGUS_BINARY to it.</warning>',
+                );
+            }
         } catch (FagusException $exception) {
             $strict = $this->strict();
             if ($strict !== null) {
@@ -107,12 +124,13 @@ final class Plugin implements EventSubscriberInterface, PluginInterface
 
     /**
      * Ends Composer with an error that says why the binary was not installed, as a failing script
-     * does: the message, and the exit status 1.
+     * does: the message, and the exit status 1. `$advice` says what to do about it, by default to
+     * try again.
      */
-    private function fail(FagusException $exception, string $setting): never
+    private function fail(FagusException $exception, string $setting, string $advice = '`vendor/bin/fagus-install` tries again.'): never
     {
         $this->io?->writeError("<error>fagus: {$exception->getMessage()}</error>");
-        $this->io?->writeError("<error>fagus: Composer fails because {$setting} is set. `vendor/bin/fagus-install` tries again.</error>");
+        $this->io?->writeError("<error>fagus: Composer fails because {$setting} is set. {$advice}</error>");
 
         throw new ScriptExecutionException('fagus: the binary was not installed.', 1);
     }

@@ -55,15 +55,26 @@ The fagus binary `/app/vendor/nforst/fagus/php/fagus/bin/fagus` could not be sta
 Remove `proc_open` (and `proc_get_status`, `proc_close`, `proc_terminate`) from
 `disable_functions` in `php.ini`. Fagus runs the binary as a process and needs them.
 
-### A development version without binaries
+### A development version
+
+```text
+fagus: nforst/fagus is installed as a development version (dev-main). The binary is the one of release 1.1.0 and may not know what the branch added. Build it from the branch with `cargo build --release` and set FAGUS_BINARY to it.
+```
+
+You installed a branch (such as `dev-main`) rather than a release. A branch lists the binaries of
+the last release, so the plugin installs that release's binary and Composer succeeds, also with
+`FAGUS_INSTALL_STRICT`. The binary is older than the PHP code and ignores options the branch
+added. Require a release, or build the binary from the branch and set `FAGUS_BINARY`
+([deployment.md](deployment.md#use-a-binary-of-your-own)).
 
 ```text
 This version of nforst/fagus (0.0.1) is a development version without built binaries. Build the binary with `cargo build --release` and set FAGUS_BINARY to it.
 ```
 
-You installed a branch (such as `dev-main`) rather than a release. Only releases list the
-binaries to install; the plugin installs nothing for a branch. Require a release, or build the
-binary from source and set `FAGUS_BINARY` ([deployment.md](deployment.md#use-a-binary-of-your-own)).
+This copy of the package lists no binaries at all, as a fork can that builds its own. The plugin
+installs nothing, and `vendor/bin/fagus-install` and `php artisan fagus:install` fail with this
+message. Build the binary and set `FAGUS_BINARY`; where `FAGUS_INSTALL_STRICT` is set, turn it off
+with `FAGUS_INSTALL_STRICT=0` for that installation.
 
 ### An unsupported platform
 

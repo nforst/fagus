@@ -46,9 +46,12 @@ fagus: There is no fagus binary for OpenBSD on amd64. Build it from source with 
 fagus: Composer fails because FAGUS_INSTALL_STRICT is set. `vendor/bin/fagus-install` tries again.
 ```
 
-Composer then exits with status 1, also for a development version without binaries. To make it
-the rule for a project, put it into the root `composer.json`; `FAGUS_INSTALL_STRICT=0` turns it
-off again, for example on a machine that uses a binary of its own:
+Composer then exits with status 1. A branch such as `dev-main` does not fail: it gets the binary
+of the last release, with a warning that the binary may not know what the branch added
+([troubleshooting.md](troubleshooting.md#a-development-version)). Only a copy of the package that
+lists no binaries fails. To make strict installation the rule for a project, put it into the root
+`composer.json`; `FAGUS_INSTALL_STRICT=0` turns it off again, for example on a machine that uses a
+binary of its own:
 
 ```json
 "extra": {
