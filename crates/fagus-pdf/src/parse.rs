@@ -272,6 +272,40 @@ pub(crate) fn entry<'a>(dictionary: &'a str, key: &str) -> Option<&'a str> {
     None
 }
 
+/// The keys and values of the text of a dictionary (`<<` to `>>`), in their order; `None` if it
+/// is not one.
+pub(crate) fn entries(dictionary: &str) -> Option<Vec<(&str, &str)>> {
+    let bytes = dictionary.as_bytes();
+    let mut position = skip_whitespace(bytes, 0);
+    if !bytes.get(position..)?.starts_with(b"<<") {
+        return None;
+    }
+    position += 2;
+    let mut entries = Vec::new();
+    loop {
+        position = skip_whitespace(bytes, position);
+        if bytes.get(position..)?.starts_with(b">>") {
+            return Some(entries);
+        }
+        if bytes.get(position) != Some(&b'/') {
+            return None;
+        }
+        let key_end = bytes[position + 1..]
+            .iter()
+            .position(|byte| b" \t\r\n\x0c\0/[]<>()%".contains(byte))
+            .map_or(bytes.len(), |end| position + 1 + end);
+        let key = &dictionary[position..key_end];
+        // The first entry of the key: a dictionary has each key once.
+        let value = entry(dictionary, key)?;
+        let value_start = value.as_ptr() as usize - dictionary.as_ptr() as usize;
+        if value_start != key_end {
+            return None;
+        }
+        entries.push((key, value));
+        position = value_start + value.len();
+    }
+}
+
 /// The number at or after `position` (after white space), and the position after it.
 pub(crate) fn number_after(pdf: &[u8], position: usize) -> Option<(usize, usize)> {
     let start = skip_whitespace(pdf, position);

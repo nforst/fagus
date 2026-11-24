@@ -29,8 +29,8 @@ const PER_STREAM: usize = 128;
 
 /// The PDF with its objects in object streams and a cross-reference stream, or `None` if it is
 /// not a PDF this understands. `catalog` holds entries for the document catalog that krilla does
-/// not write; those it has already are left as they are. With an encryptor, the PDF is
-/// encrypted.
+/// not write; those it has already are left as they are, but for dictionaries, which are merged.
+/// With an encryptor, the PDF is encrypted.
 pub(crate) fn compact(
     pdf: &[u8],
     catalog: &[(&str, &str)],
@@ -270,21 +270,32 @@ pub(crate) fn classic(pdf: &[u8], catalog: &[(&str, &str)]) -> Option<Vec<u8>> {
     Some(out)
 }
 
-/// A dictionary with `entries` added where it has none of the key.
+/// A dictionary with `entries` added where it has none of the key. Where both the dictionary
+/// and an entry have a dictionary for a key (as with `/ViewerPreferences`, which krilla writes
+/// for PDF/UA), the two are merged the same way; any other value the dictionary has stays as it
+/// is.
 fn with_entries(dictionary: &[u8], entries: &[(&str, &str)]) -> Option<Vec<u8>> {
-    let Some(open) = dictionary.strip_suffix(b">>") else {
+    if !dictionary.ends_with(b">>") {
         return Some(dictionary.to_vec());
-    };
-    let text = std::str::from_utf8(dictionary).ok()?;
-    let mut out = open.to_vec();
+    }
+    let mut text = std::str::from_utf8(dictionary).ok()?.to_owned();
     for (key, value) in entries {
-        if parse::entry(text, key).is_none() {
-            out.extend_from_slice(key.as_bytes());
-            out.extend_from_slice(value.as_bytes());
+        let Some(existing) = parse::entry(&text, key) else {
+            text.truncate(text.len() - 2);
+            text.push_str(key);
+            text.push_str(value);
+            text.push_str(">>");
+            continue;
+        };
+        let inner = existing.trim();
+        if value.starts_with("<<") && inner.starts_with("<<") && inner.ends_with(">>") {
+            let start = inner.as_ptr() as usize - text.as_ptr() as usize;
+            let range = start..start + inner.len();
+            let merged = with_entries(inner.as_bytes(), &parse::entries(value)?)?;
+            text.replace_range(range, std::str::from_utf8(&merged).ok()?);
         }
     }
-    out.extend_from_slice(b">>");
-    Some(out)
+    Some(text.into_bytes())
 }
 
 fn deflate(data: &[u8]) -> Option<Vec<u8>> {
@@ -526,6 +537,62 @@ mod tests {
         );
         // An entry the catalog has stays as it is.
         assert!(!catalogs[0].contains("/Other"), "{}", catalogs[0]);
+    }
+
+    #[test]
+    fn merges_dictionaries_the_catalog_has_already() {
+        let merged = |dictionary: &str, entries: &[(&str, &str)]| {
+            String::from_utf8(with_entries(dictionary.as_bytes(), entries).expect("merged")).expect("text")
+        };
+        let preferences = [(
+            "/ViewerPreferences",
+            "<</DisplayDocTitle true/FitWindow true/CenterWindow true>>",
+        )];
+        // As krilla writes the catalog of a PDF/UA file: the entry is there, and stays first.
+        assert_eq!(
+            merged(
+                "<<\n  /Type /Catalog\n  /ViewerPreferences <<\n    /DisplayDocTitle true\n  >>\n  /Lang (de)\n>>",
+                &preferences
+            ),
+            "<<\n  /Type /Catalog\n  /ViewerPreferences <<\n    /DisplayDocTitle true\n  /FitWindow true/CenterWindow true>>\n  /Lang (de)\n>>"
+        );
+        // Nothing to add leaves the bytes as they are; a value of the catalog wins.
+        let same = "<</ViewerPreferences<</FitWindow false/CenterWindow true/DisplayDocTitle true>>>>";
+        assert_eq!(merged(same, &preferences), same);
+        // Dictionaries inside, and names that begin alike, are told apart.
+        assert_eq!(
+            merged(
+                "<</ViewerPreferences<</Other<</FitWindow true>>/FitWindowed [1 2]>>/Pages 2 0 R>>",
+                &preferences
+            ),
+            "<</ViewerPreferences<</Other<</FitWindow true>>/FitWindowed [1 2]\
+             /DisplayDocTitle true/FitWindow true/CenterWindow true>>/Pages 2 0 R>>"
+        );
+        // A reference is no dictionary to merge into, and a name is no dictionary to merge.
+        let reference = "<</ViewerPreferences 7 0 R/PageMode/UseNone>>";
+        assert_eq!(
+            merged(reference, &[preferences[0], ("/PageMode", "/UseOutlines")]),
+            reference
+        );
+        assert_eq!(
+            merged(
+                "<</Type/Catalog>>",
+                &[preferences[0], ("/PageMode", "/UseOutlines")]
+            ),
+            "<</Type/Catalog/ViewerPreferences<</DisplayDocTitle true/FitWindow true/CenterWindow true>>\
+             /PageMode/UseOutlines>>"
+        );
+        assert_eq!(
+            parse::entries("<< /A 1/B<</C 2>> /D[/E /F]/G(>>)>>"),
+            Some(vec![
+                ("/A", " 1"),
+                ("/B", "<</C 2>> "),
+                ("/D", "[/E /F]"),
+                ("/G", "(>>)")
+            ])
+        );
+        assert_eq!(parse::entries("<</A 1"), None);
+        assert_eq!(parse::entries("[1 2]"), None);
     }
 
     #[test]

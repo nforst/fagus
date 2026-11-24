@@ -36,11 +36,13 @@ mod tagging;
 mod tainted;
 mod text_anchor;
 mod update;
+mod view;
 mod xmp;
 
 pub use encrypt::{Encryption, Permission};
 pub use forms::{ButtonAction, Field, FieldKind, FieldWidget};
 pub use tagging::{Element, Numbering, Owner, Repeat, Role, Scope, Structure};
+pub use view::{InitialView, PageLayout, PageMode, Zoom};
 pub use xmp::Extension;
 
 use std::sync::Arc;
@@ -337,6 +339,9 @@ pub struct Options {
     /// smaller than its file); another value is an error. Without one, the pixels of images are
     /// compressed without loss. JPEG images are embedded as they are either way.
     pub image_quality: Option<u8>,
+    /// How a viewer shows the PDF when it opens it. What the document cannot have (see
+    /// [`InitialView::checked`]) is not written.
+    pub view: Option<InitialView>,
 }
 
 /// A link on a page.
@@ -438,14 +443,27 @@ pub fn write(
         .as_ref()
         .map(encrypt::Encryptor::new)
         .transpose()?;
+    let page_count = pages.len();
     let written = write_uncompacted(&mut pages, fonts, metadata, options)?;
     drop(pages);
     // A viewer shows the title in place of the file name, as with Chrome's PDFs.
-    let catalog: &[(&str, &str)] = if metadata.title.is_some() {
-        &[("/ViewerPreferences", "<</DisplayDocTitle true>>")]
-    } else {
-        &[]
-    };
+    let view = options
+        .view
+        .as_ref()
+        .map(|view| view.checked(options.conformance, page_count).0);
+    let preferences = InitialView::preferences(view.as_ref(), metadata.title.is_some());
+    let mut entries: Vec<(&str, String)> = Vec::new();
+    if !preferences.is_empty() {
+        entries.push(("/ViewerPreferences", format!("<<{preferences}>>")));
+    }
+    if let Some(view) = &view {
+        entries.extend(view.entries(&written.pdf));
+    }
+    let entries: Vec<(&str, &str)> = entries
+        .iter()
+        .map(|(key, value)| (*key, value.as_str()))
+        .collect();
+    let catalog = &entries[..];
     // An encrypted PDF is written in the same pass as the object streams; unlike them, it must
     // not fail quietly.
     if let Some(encryptor) = &mut encryptor {
