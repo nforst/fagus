@@ -199,8 +199,7 @@ Fagus::useEngine(new Engine(
 ],
 ```
 
-On the command line, `fagus render` takes `--sans-serif`; the worker that PHP starts also takes
-`--serif` and `--monospace`.
+On the command line, `fagus render` and the worker take `--sans-serif`, `--serif` and `--monospace`.
 
 Where a family is not set, Fagus chooses:
 
