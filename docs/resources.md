@@ -123,13 +123,167 @@ Fagus asks the resolver before it looks for a file; after `null`, it tries the f
 The resolver sees every URL the document refers to that is not a `data:` URL or handed over,
 including `https://…` URLs. It decides what to hand out. Fagus does not go to the network, but
 your resolver may, under your own rules: check the host against a list, set a timeout, and keep
-in mind that a document from user input can name any URL.
+in mind that a document from user input can name any URL. The
+[recipe below](#remote-images-through-the-resolver-with-a-host-allowlist) shows how.
 
 The resolver is asked once for each URL in a render, whatever it answers, however often the
 document names the URL.
 
 The engine waits while the callback runs; the [timeout](deployment.md#timeouts) does not count
 that time, as it limits the wait for the worker's answers.
+
+## Remote images through the resolver, with a host allowlist
+
+Fagus fetches nothing, so `<img src="https://cdn.example.com/products/4711.jpg">` is missing from
+the PDF until a resolver answers it. A resolver that fetches whatever URL it gets is a hole in
+your server (server-side request forgery): a document built from user input can name
+`http://169.254.169.254/…`, `http://localhost:9200/…` or a host of your internal network, and
+the answer ends up in a PDF the user reads. Fetch only what passes all of these:
+
+- **`https` only.** No `http`, `file`, `ftp`, `gopher` or anything else.
+- **A host from your list, compared exactly.** Parse the URL with `parse_url()`, lower the host,
+  and look it up with `in_array(…, true)`. No `str_contains()`, no `str_ends_with()`, no regular
+  expression: `cdn.example.com.evil.test` and `evil.test/cdn.example.com` pass those. Refuse URLs
+  with a user name or a port.
+- **No redirects.** An allowed host that redirects to `http://10.0.0.5/` leads the request where
+  the list does not. Turn redirects off and take only a `200`.
+- **A timeout.** The render waits for the resolver.
+- **A size limit**, enforced while the data arrives.
+
+The list holds the names of hosts you trust to serve images: your CDN, your storage bucket. An IP
+address, `localhost` or an internal host never belongs on it, and neither does a host where users
+upload what they like under any path, unless you check the path too.
+
+In plain PHP, with the cURL extension:
+
+```php
+use Fagus\Fagus;
+
+/**
+ * The data at an https URL of one of the hosts, or null.
+ *
+ * @param  list<string>  $hosts
+ */
+function fetch_allowed(string $url, array $hosts, int $limit = 5 * 1024 * 1024): ?string
+{
+    $parts = parse_url($url);
+    if (! is_array($parts)
+        || strtolower($parts['scheme'] ?? '') !== 'https'
+        || ! in_array(strtolower($parts['host'] ?? ''), $hosts, true)
+        || isset($parts['user']) || isset($parts['pass']) || isset($parts['port'])) {
+        return null;
+    }
+    $data = '';
+    $curl = curl_init($url);
+    curl_setopt_array($curl, [
+        CURLOPT_PROTOCOLS => CURLPROTO_HTTPS,
+        CURLOPT_FOLLOWLOCATION => false,
+        CURLOPT_CONNECTTIMEOUT => 3,
+        CURLOPT_TIMEOUT => 5,
+        // Returning another number than the length of the chunk stops the transfer.
+        CURLOPT_WRITEFUNCTION => function ($curl, string $chunk) use (&$data, $limit): int {
+            $data .= $chunk;
+
+            return strlen($data) > $limit ? 0 : strlen($chunk);
+        },
+    ]);
+    $found = curl_exec($curl) === true && curl_getinfo($curl, CURLINFO_RESPONSE_CODE) === 200;
+
+    return $found ? $data : null;
+}
+
+$hosts = ['cdn.example.com', 'media.example.com'];
+
+$pdf = Fagus::html($html)
+    ->resolver(fn (string $url): ?string => fetch_allowed($url, $hosts))
+    ->render();
+```
+
+In Laravel, with the HTTP client:
+
+```php
+use Fagus\Laravel\Facades\Fagus;
+use Illuminate\Support\Facades\Http;
+
+Fagus::view('catalog.show', $data)->resolver(function (string $url): ?string {
+    $hosts = ['cdn.example.com', 'media.example.com'];
+    $limit = 5 * 1024 * 1024;
+    $parts = parse_url($url);
+    if (! is_array($parts)
+        || strtolower($parts['scheme'] ?? '') !== 'https'
+        || ! in_array(strtolower($parts['host'] ?? ''), $hosts, true)
+        || isset($parts['user']) || isset($parts['pass']) || isset($parts['port'])) {
+        return null;
+    }
+
+    return rescue(function () use ($url, $limit): ?string {
+        $response = Http::withoutRedirecting()
+            ->connectTimeout(3)
+            ->timeout(5)
+            ->withOptions(['progress' => function (int $total, int $loaded) use ($limit): void {
+                if ($loaded > $limit) {
+                    throw new RuntimeException('The image is too large.');
+                }
+            }])
+            ->get($url);
+
+        return $response->status() === 200 ? $response->body() : null;
+    }, report: false);
+});
+```
+
+Everything the resolver refuses or fails to fetch is `null`: the image is left out, and the
+diagnostics name it as `resource.not-loaded`. An image that must not be missing is better caught
+with `strict()` in a test than by a resolver that throws.
+
+A resolver fetches one URL after the other, and the render waits for each. For a document with
+many remote images, fetch them before the render, as the next section shows.
+
+## Fetch remote images before the render
+
+Where the application knows the URLs before it renders, such as the product images of a catalog,
+it can fetch them all at once and hand them over with `resource()`. Fagus then asks for nothing,
+and fifty images take as long as the slowest one, not as long as all of them together.
+
+In Laravel, `Http::pool()` sends the requests concurrently:
+
+```php
+use Fagus\Laravel\Facades\Fagus;
+use Illuminate\Http\Client\Pool;
+use Illuminate\Http\Client\Response;
+use Illuminate\Support\Facades\Http;
+
+$hosts = ['cdn.example.com', 'media.example.com'];
+
+// The URLs as the view writes them, each once, and only those of the allowed hosts.
+$urls = $products->pluck('image_url')->unique()->filter(function (string $url) use ($hosts): bool {
+    $parts = parse_url($url);
+
+    return is_array($parts)
+        && strtolower($parts['scheme'] ?? '') === 'https'
+        && in_array(strtolower($parts['host'] ?? ''), $hosts, true)
+        && ! isset($parts['user']) && ! isset($parts['pass']) && ! isset($parts['port']);
+})->values();
+
+$responses = Http::pool(fn (Pool $pool) => $urls->map(
+    fn (string $url) => $pool->as($url)->withoutRedirecting()->connectTimeout(3)->timeout(5)->get($url),
+)->all());
+
+$pdf = Fagus::view('catalog.show', ['products' => $products]);
+foreach ($responses as $url => $response) {
+    // A request that failed is an exception in the list, not a response.
+    if ($response instanceof Response && $response->status() === 200) {
+        $pdf = $pdf->resource($url, $response->body());
+    }
+}
+
+return $pdf->download('catalog.pdf');
+```
+
+The same rules apply as for a resolver: the list of hosts, no redirects, a timeout. The key of
+`resource()` must be the URL exactly as the document writes it (see
+[above](#hand-over-data-with-resource)). An image that was not fetched is missing from the PDF
+with a `resource.not-loaded` diagnostic, unless a resolver or a file answers it.
 
 ## `data:` URLs
 
