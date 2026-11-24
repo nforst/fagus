@@ -719,6 +719,61 @@ mod tests {
     }
 
     #[test]
+    fn writes_images_as_jpegs_of_a_quality() {
+        let html: &[u8] = b"<img src=photo.webp width=200>";
+        let photo: &[u8] = include_bytes!("../../../tests/corpus/images/photo.webp");
+        let request = |id: u32, quality: Value| {
+            let mut header = json!({
+                "id": id,
+                "html": 0,
+                "resources": [{ "url": "photo.webp", "blob": 1 }],
+                "created": "2026-11-25T12:00:00Z",
+            });
+            if !quality.is_null() {
+                header["imageQuality"] = quality;
+            }
+            frame(RENDER, &header, &[html, photo])
+        };
+        let mut input = Vec::new();
+        for (id, quality) in [
+            Value::Null,
+            json!(80),
+            json!(30),
+            json!(0),
+            json!(101),
+            json!(-1),
+            json!(80.5),
+            json!("80"),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            input.extend(request(id as u32 + 1, quality));
+        }
+        let output = Shared::default();
+        serve(engine(), io::Cursor::new(input), output.clone()).expect("served");
+        let output = output.0.lock().expect("lock").clone();
+        let frames = frames(&output);
+        let kinds: String = frames.iter().map(|frame| char::from(frame.kind)).collect();
+        assert_eq!(kinds, "HPPPEEEEE");
+        let jpeg = |pdf: &[u8]| pdf.windows(10).any(|window| window == b"/DCTDecode");
+        let (lossless, high, low) = (&frames[1].blobs[0], &frames[2].blobs[0], &frames[3].blobs[0]);
+        assert!(!jpeg(lossless) && jpeg(high) && jpeg(low));
+        assert!(low.len() < high.len() && high.len() < lossless.len());
+        // A quality that is none is an error, not a guess.
+        for (frame, quality) in frames[4..7].iter().zip(["0", "101", "-1"]) {
+            assert_eq!(
+                frame.header["message"],
+                format!("the image quality must be between 1 and 100, not {quality}")
+            );
+        }
+        for frame in &frames[7..] {
+            let message = frame.header["message"].as_str().expect("a message");
+            assert!(message.starts_with("invalid request"), "{message}");
+        }
+    }
+
+    #[test]
     fn parses_xhtml_as_xml() {
         // An empty-element tag closes the `div` in XHTML only; in HTML it holds the paragraph.
         let html: &[u8] = br#"<html xmlns="http://www.w3.org/1999/xhtml"><body><div style="break-after: page"/><p>x</p></body></html>"#;

@@ -68,6 +68,10 @@ enum Command {
         /// Make the form controls fields of an interactive form, which readers fill in.
         #[arg(long)]
         forms: bool,
+        /// Write opaque images as JPEGs of this quality, from 1 (smallest) to 100 (best); images
+        /// with transparent pixels, and those that are smaller without loss, stay as they are.
+        #[arg(long, value_name = "1-100", value_parser = clap::value_parser!(u8).range(1..=100))]
+        image_quality: Option<u8>,
         /// Attach a file (repeatable).
         #[arg(long = "attach")]
         attachments: Vec<PathBuf>,
@@ -491,6 +495,7 @@ fn main() -> Result<()> {
             untagged,
             accessible,
             forms,
+            image_quality,
             attachments,
             factur_x,
             profile,
@@ -558,6 +563,9 @@ fn main() -> Result<()> {
                 document = document.conformance(level);
             }
             document = document.tagged(!untagged).forms(forms);
+            if let Some(quality) = image_quality {
+                document = document.image_quality(quality);
+            }
             if accessible {
                 document = document.accessible();
             }

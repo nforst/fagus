@@ -40,6 +40,9 @@ struct Request {
     accessible: bool,
     #[serde(default)]
     forms: bool,
+    /// The quality of the JPEGs that opaque images are written as, from 1 to 100.
+    #[serde(default)]
+    image_quality: Option<i64>,
     #[serde(default)]
     attachments: Vec<Attachment>,
     #[serde(default)]
@@ -371,6 +374,13 @@ fn document(
         document = document.conformance(level);
     }
     document = document.tagged(request.tagged).forms(request.forms);
+    if let Some(quality) = request.image_quality {
+        let quality = u8::try_from(quality)
+            .ok()
+            .filter(|quality| (1..=100).contains(quality))
+            .ok_or_else(|| format!("the image quality must be between 1 and 100, not {quality}"))?;
+        document = document.image_quality(quality);
+    }
     if request.accessible {
         document = document.accessible();
     }
