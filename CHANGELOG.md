@@ -39,6 +39,7 @@ All notable changes to this project are documented in this file. The format is b
 - Text without a `font-family` is set in the `serif` family, which without fonts of your own is the built-in Inter and with them the first font of your font directories. That was only in a table of [fonts.md](docs/fonts.md#set-the-generic-families); getting started, the Laravel configuration, troubleshooting, the wkhtmltopdf guide and the README say it now, and the Blade example sets a `font-family`.
 - A recipe for a header and footer from Blade partials, with running elements and page numbers ([laravel.md](docs/laravel.md#put-a-blade-partial-in-the-header-and-footer)).
 - What the Composer plugin does for a branch is described as it is: troubleshooting, deployment and releasing said that a branch gets no binary.
+- A document whose root element has `display: none` has one empty page, with its margin boxes, as Chrome prints it. Fagus wrote a PDF without pages, which readers do not open, and reported 0 pages.
 
 ## [1.1.0] - 2026-11-20
 

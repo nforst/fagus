@@ -23,6 +23,23 @@ fn renders_css_that_makes_the_css_parser_panic() {
 }
 
 #[test]
+fn a_document_without_a_root_box_has_a_page() {
+    // Found by the layout invariants: with `display: none` on the root element, the PDF had no
+    // page at all. Chrome prints one empty page, with its margin boxes.
+    let html = "<style>@page { @top-center { content: 'Page ' counter(page) } }</style>\
+                <html style='display: none'>x";
+    let output = Engine::new().render(&Document::html(html)).expect("rendered");
+    assert_eq!(output.pages, 1);
+    let layout = Engine::new()
+        .render(&Document::html("<html style='display: none'><p id=text>x").report_layout(true))
+        .expect("rendered")
+        .layout
+        .expect("layout");
+    assert_eq!(layout.pages.len(), 1);
+    assert_eq!(layout.elements[0].boxes, []);
+}
+
+#[test]
 fn renders_clip_shapes_too_large_to_draw() {
     // The clip was left out but its end was not, which krilla could not pop.
     renders("<div style='clip-path: circle(1e30px)'>x</div>");

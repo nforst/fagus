@@ -182,6 +182,17 @@ pub fn layout_shrunk(
         .document_element()
         .and_then(|root| styled.style(root))
         .map_or_else(ComputedStyle::default, |style| (**style).clone());
+    // A document without a root box (its root element has `display: none`) still has a page,
+    // an empty one with its margin boxes, as Chrome prints it: readers open no PDF without pages.
+    if tree.root.is_none() {
+        let empty = tree.push(tree::LayoutBox {
+            style: std::sync::Arc::new(tree::anonymous_style(&ComputedStyle::default())),
+            node: None,
+            generated: false,
+            kind: tree::BoxKind::Block { children: Vec::new() },
+        });
+        tree.root = Some(empty);
+    }
     page::add_margin_images(&mut tree, rules, images);
     scrollbars::add_scrolling(&mut tree);
     let (mut pages, mut numbers) = page::paginate(&tree, fonts, rules, &root_style, shrink);
