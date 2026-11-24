@@ -81,6 +81,39 @@ fn cuts_the_font_size_to_the_largest_of_chrome() {
 }
 
 #[test]
+fn keeps_the_zoom_within_the_range_of_chrome() {
+    // Found by the layout invariants: lengths times a `zoom` of 1e30 were infinite, and text
+    // with such a `letter-spacing` had advances that are no numbers. Chrome keeps the zoom of
+    // an element with those of its ancestors between a millionth and a million.
+    let pages = |content: &str| {
+        let html = format!(
+            "<style>@page {{ size: 1000px 1000px; margin: 0 }} body {{ margin: 0 }}</style>{content}"
+        );
+        Engine::new()
+            .render(&Document::html(html))
+            .expect("rendered")
+            .pages
+    };
+    assert_eq!(
+        pages("<div style='zoom: 1e6'><p style='height: 5e-3px'></p></div>"),
+        5
+    );
+    assert_eq!(
+        pages("<div style='zoom: 1e8'><p style='height: 5e-5px'></p></div>"),
+        1
+    );
+    assert_eq!(
+        pages("<div style='zoom: 1e4'><div style='zoom: 1e4'><p style='height: 5e-5px'></p></div></div>"),
+        1
+    );
+    assert_eq!(
+        pages("<div style='zoom: 1e-8'><p style='height: 5e9px'></p></div>"),
+        5
+    );
+    renders("<div style='zoom: 1e30; letter-spacing: 1e30px'>y z</div>");
+}
+
+#[test]
 fn renders_clip_shapes_too_large_to_draw() {
     // The clip was left out but its end was not, which krilla could not pop.
     renders("<div style='clip-path: circle(1e30px)'>x</div>");

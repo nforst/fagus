@@ -2537,7 +2537,9 @@ fn build_style(
         };
         if let Some(own) = own {
             style.specified_zoom = own;
-            style.zoom = parent.zoom * own;
+            // Within the range Blink keeps the effective zoom in (`SetEffectiveZoom`), so that
+            // no length times it is infinite.
+            style.zoom = (parent.zoom * own).clamp(MIN_ZOOM, MAX_ZOOM);
         }
     }
     let ratio = style.zoom / parent.zoom;
@@ -3021,6 +3023,10 @@ fn may_set_content(rules: &[fagus_css::MatchedRule<'_>]) -> bool {
 
 /// The largest font size, in pixels, as in Chrome: a larger one is cut to it.
 const MAX_FONT_SIZE: f32 = 10_000.0;
+
+/// The smallest and the largest zoom of an element with those of its ancestors, as in Chrome.
+const MIN_ZOOM: f32 = 1.0e-6;
+const MAX_ZOOM: f32 = 1.0e6;
 
 /// The properties that select an element's fonts.
 const FONT_SELECTION: [PropertyId<'static>; 4] = [
