@@ -381,7 +381,10 @@ impl Checker<'_> {
                 );
             }
         }
-        if page.width.0 <= 0 || page.height.0 <= 0 {
+        // A page may be 0 wide or tall: with margins of a billion pixels and more, its size is
+        // lost in their sum (`@page { margin: -1e30px }`). Chrome prints no such document at
+        // all; Fagus writes the page with the smallest size a PDF has.
+        if page.width.0 < 0 || page.height.0 < 0 {
             self.on_page(
                 Invariant::Sizes,
                 format!(
@@ -676,6 +679,15 @@ mod tests {
             let stats = check(&Engine::new(), &Document::html(html)).expect("holds");
             assert_eq!(stats.pages, 1, "{html}");
         }
+    }
+
+    #[test]
+    fn absurd_lengths_hold_the_invariants() {
+        let html = "<style>@page { size: 300px 200px; margin: -1e30px }</style>\
+                    <div id=far style='margin: -1e30px; width: 1e30px; font-size: 1e30px'>x</div>\
+                    <div style='zoom: 1e30; font-size: 1e30px; letter-spacing: 1e30px'>y z</div>";
+        let stats = check(&Engine::new(), &Document::html(html)).expect("holds");
+        assert!(stats.saturated > 0);
     }
 
     #[test]
