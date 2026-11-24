@@ -30,6 +30,7 @@ image-webp.workspace = true
 gif.workspace = true
 tiff.workspace = true
 re_rav1d.workspace = true
+jpeg-encoder.workspace = true
 usvg.workspace = true
 resvg.workspace = true
 # Switches krilla's compression to the faster zlib-rs backend, and measures the content streams

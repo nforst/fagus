@@ -19,6 +19,9 @@ Fagus is licensed under the MIT license or the Apache License 2.0 (LICENSE-MIT, 
 The fagus binary also contains the code and data of others listed here, each under its own
 license: parts ported from Chromium and Blink, data of Unicode, a part ported from HarfBuzz, the
 user agent style sheet of the HTML Standard, the font Inter, the hyphenation dictionaries of Chromium, the Rust API of dav1d-rs, and the Rust crates it is built from.
+
+This software is based in part on the work of the Independent JPEG Group (the JPEG encoder, the
+crate jpeg-encoder below).
 TEXT
   section "Chromium (Blink): the predefined counter styles and the algorithms of the complex ones, the marks of form controls, the distribution of the height of cells spanning table rows, the spacing of East Asian punctuation and text (fagus-layout, fagus-paint, fagus-style, fagus-text)" crates/fagus-layout/CHROMIUM-LICENSE
   section "Blink's shapes (Adobe): the geometry of shape-outside (fagus-layout)" crates/fagus-layout/ADOBE-SHAPES-LICENSE
