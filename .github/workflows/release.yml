@@ -39,7 +39,8 @@ jobs:
           - { target: aarch64-apple-darwin, os: macos-latest }
           - { target: x86_64-pc-windows-msvc, os: windows-latest }
           # FreeBSD has no runner: the binary is built natively in a FreeBSD VM on Linux, on the
-          # oldest major release FreeBSD supports, and renders a document there.
+          # oldest major release FreeBSD supports, and renders a document there; the job
+          # `freebsd-15` runs it on the newest one.
           - { target: x86_64-unknown-freebsd, os: ubuntu-latest, freebsd: '14' }
     runs-on: ${{ matrix.os }}
     steps:
@@ -200,9 +201,36 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
+  # The FreeBSD binary is built on FreeBSD 14 and must run on the newest major release too: it
+  # renders a document on FreeBSD 15 before the release is drafted. The job only reads: the VM's
+  # action gets no token that writes or signs.
+  freebsd-15:
+    name: x86_64-unknown-freebsd on FreeBSD 15
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: fagus-x86_64-unknown-freebsd
+          path: dist
+      - uses: vmactions/freebsd-vm@811efaaac0668df8bfb8308c3ec997b5ab50037b # v1.6.0
+        with:
+          release: '15'
+          copyback: false
+          run: |
+            set -e
+            freebsd-version
+            chmod +x dist/fagus-x86_64-unknown-freebsd
+            echo '<h1>Fagus</h1>' > probe.html
+            dist/fagus-x86_64-unknown-freebsd render probe.html -o probe.pdf
+            test "$(head -c 5 probe.pdf)" = "%PDF-"
+
   release:
     name: Draft release
-    needs: [build, library]
+    needs: [build, library, freebsd-15]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0

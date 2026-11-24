@@ -80,7 +80,8 @@ jobs:
   # a FreeBSD VM on Linux, the binary renders outside a sandbox (there is none on FreeBSD), and
   # with system fonts it finds the fonts that fontconfig's configuration in /usr/local/etc/fonts
   # lists (crates/fagus-text/src/system.rs): DejaVu, moved where only local.conf names it, gives
-  # the Hebrew letters that the built-in Inter lacks. gates.yml renders the corpus there.
+  # the Hebrew letters that the built-in Inter lacks. gates.yml renders the corpus there. The
+  # binary comes back from the VM (target/ stays there) for the job below.
   freebsd:
     name: FreeBSD 14 (x64)
     runs-on: ubuntu-latest
@@ -91,7 +92,6 @@ jobs:
         with:
           release: '14'
           envs: 'CARGO_TERM_COLOR RUSTFLAGS'
-          copyback: false
           prepare: |
             set -e
             pkg install -y dejavu
@@ -115,6 +115,51 @@ jobs:
             echo '<p lang="he">&#x05E9;&#x05DC;&#x05D5;&#x05DD;</p>' > hebrew.html
             if target/debug/fagus render hebrew.html -o hebrew.pdf --strict; then exit 1; fi
             target/debug/fagus render hebrew.html -o hebrew.pdf --strict --system-fonts
+            mkdir dist
+            cp target/debug/fagus dist/fagus
+            rm -rf target
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: fagus-freebsd-14
+          path: dist/fagus
+          if-no-files-found: error
+          retention-days: 1
+
+  # The binaries of a release are built on FreeBSD 14, the oldest major release FreeBSD supports,
+  # and must run on the newest one too: the binary built above renders the same documents on
+  # FreeBSD 15, without a toolchain.
+  freebsd-15:
+    name: FreeBSD 15 (x64)
+    needs: freebsd
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: fagus-freebsd-14
+          path: dist
+      - uses: vmactions/freebsd-vm@811efaaac0668df8bfb8308c3ec997b5ab50037b # v1.6.0
+        with:
+          release: '15'
+          copyback: false
+          prepare: |
+            set -e
+            pkg install -y dejavu
+          run: |
+            set -e
+            freebsd-version
+            chmod +x dist/fagus
+            echo '<p>FreeBSD</p>' > probe.html
+            FAGUS_LOG=debug dist/fagus render probe.html -o probe.pdf 2> log.txt
+            cat log.txt
+            grep -q "no sandbox on this system" log.txt
+            test "$(head -c 5 probe.pdf)" = "%PDF-"
+            mkdir -p /usr/local/etc/fonts /opt/fagus-fonts
+            mv "$(dirname "$(find /usr/local/share/fonts -name DejaVuSans.ttf)")" /opt/fagus-fonts/
+            printf '<fontconfig><dir>/opt/fagus-fonts</dir></fontconfig>\n' > /usr/local/etc/fonts/local.conf
+            echo '<p lang="he">&#x05E9;&#x05DC;&#x05D5;&#x05DD;</p>' > hebrew.html
+            if dist/fagus render hebrew.html -o hebrew.pdf --strict; then exit 1; fi
+            dist/fagus render hebrew.html -o hebrew.pdf --strict --system-fonts
 
   # The fuzz targets (fuzz/, a workspace of its own on nightly) still build: the worker target
   # includes the protocol code of fagus-cli, and fuzz.yml runs only at night.

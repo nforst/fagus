@@ -195,7 +195,7 @@ Under PHP-FPM the pool's environment is cleared by default (`clear_env = yes`), 
 
 ## FreeBSD
 
-- The binary is `fagus-x86_64-unknown-freebsd`, for amd64, built and tested on FreeBSD 14. It
+- The binary is `fagus-x86_64-unknown-freebsd`, for amd64, built on FreeBSD 14 and tested on 14 and 15. It
   prints the same PDF as the other platforms. FreeBSD on arm64 and the other BSDs have no binary:
   build one from source (`cargo build --release -p fagus-cli`) and set `FAGUS_BINARY`.
 - There is no [sandbox](cli.md#sandbox): the worker renders with the rights of the PHP process,

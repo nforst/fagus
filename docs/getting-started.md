@@ -15,7 +15,7 @@ browser, Node or Docker image to install.
   | Linux with musl (Alpine) | x64, arm64 |
   | macOS | x64 (Intel), arm64 (Apple silicon) |
   | Windows | x64 |
-  | FreeBSD (14 or newer) | x64 |
+  | FreeBSD (14 or newer, tested on 14 and 15) | x64 |
 
 - For the Laravel integration: Laravel 13. Older versions of Laravel conflict with the package.
 
