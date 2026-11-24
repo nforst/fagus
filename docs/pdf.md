@@ -2,7 +2,7 @@
 
 This page describes the PDF file Fagus writes and the options that change it: metadata, links and
 bookmarks, fill-in forms, tagged and accessible PDF, PDF/A, attachments, electronic invoices,
-passwords and digital signatures. How the pages look is up to the HTML and CSS (see
+passwords, digital signatures and the compression of images. How the pages look is up to the HTML and CSS (see
 [css.md](css.md) and [paged-media.md](paged-media.md)); the methods of the document builder are
 described in [php.md](php.md).
 
@@ -1223,12 +1223,79 @@ Fagus keeps files small without options to set:
   tiling pattern;
 - JPEG images are embedded as they are, without decoding and compressing them again.
 
+The pixels of other images are compressed without loss, which keeps every pixel and makes a
+photo large: `imageQuality()` writes them as JPEGs instead (see
+[Make photos smaller](#make-photos-smaller)).
+
 The invoice above is 16 KB as a tagged PDF, 15 KB without tags and 23 KB as PDF/A-3 with its XML
 (which also carries an ICC profile). The tags grow with the number of elements, most with large
 tables; `tagged(false)` leaves them out where accessibility is not needed.
 
 The binary compresses on two threads of its own while it draws the pages; the environment variable
 `RAYON_NUM_THREADS` sets how many.
+
+### Make photos smaller
+
+A PDF keeps the pixels of a PNG, WebP, GIF, AVIF, BMP or TIFF image without loss. That is right
+for logos, charts and screenshots, but a photo then takes many times the room of its file: a
+WebP photo of 18 KB (480 × 320 pixels) becomes 200 KB in the PDF. `imageQuality()` writes such images as JPEGs,
+which PDF stores as they are:
+
+```php
+Fagus::html($html)->imageQuality(80)->save('catalog.pdf');
+```
+
+The quality goes from 1 (the smallest file) to 100 (the best picture); 80 is a good value for
+screens and office printers, 90 and more for print. A page with that photo and nothing else:
+
+| Quality | Size of the PDF |
+|---|--:|
+| none (without loss) | 202 KB |
+| 100 | 143 KB |
+| 95 | 60 KB |
+| 90 | 42 KB |
+| 80 | 26 KB |
+| 50 | 14 KB |
+
+A photo of 1200 × 1200 pixels (68 KB as WebP) makes a PDF of 1.7 MB without the option and of
+122 KB at a quality of 80. Writing a JPEG is also faster than compressing the pixels without
+loss: that page renders in about half the time.
+
+What becomes a JPEG, and what does not:
+
+| Image | With `imageQuality()` |
+|---|---|
+| PNG, GIF, WebP, AVIF, BMP and TIFF images whose pixels are all opaque | A JPEG of the quality |
+| The same with transparent pixels | As without it: pixels without loss and a soft mask. A JPEG has no transparency, and its artifacts show at soft edges |
+| PNG, GIF, lossless WebP, BMP and TIFF images whose JPEG would be no smaller than their file | As without it. Logos, charts, QR codes and scans in black and white compress better without loss, and stay sharp |
+| JPEG | Embedded as it is, as always: never compressed a second time |
+| A CMYK JPEG without an ICC profile, which is converted to sRGB | A JPEG of the quality |
+| Images with a `filter` | A JPEG of the quality where the filtered pixels are all opaque (a blur or shadow makes transparent ones) |
+| SVG, and pages of PDF files | Vector graphics, as always. Raster images inside an SVG image stay without loss |
+| Shadows, gradients and SVG filters that Fagus draws as pixels | Without loss |
+
+The JPEGs are baseline JPEGs that every viewer reads. Below a quality of 90 their color has half
+the resolution of their brightness (4:2:0, as cameras save photos), from 90 on the full
+resolution (4:4:4), which keeps colored text and thin colored lines sharp. An image whose pixels
+are all gray becomes a gray JPEG, and the ICC profile of an image goes into its JPEG. Images of
+16 bits per channel become 8 bits. The same image and quality give the same bytes on every
+platform, so the output stays [reproducible](#make-the-output-reproducible).
+
+A screenshot with text can be smaller as a JPEG and still look worse: the rule above only looks
+at the size. Choose a quality of 90 or more for documents with screenshots, or leave the option
+off for them.
+
+JPEG is allowed in every PDF/A level and in PDF/UA, so `imageQuality()` goes with `pdfA()` and
+`accessible()`. In PDF/A-1b, which has no transparency, an image with transparent pixels is
+refused with or without it.
+
+The option does not scale images down: a photo of 12 megapixels stays one of 12 megapixels.
+Scale large photos to the size they are printed at before you hand them to the document.
+
+On the command line the option is `--image-quality 80`, in Rust `Document::image_quality(80)`,
+and in Laravel the `image_quality` key of `config/fagus.php` sets it for every document. The
+JPEG encoder is the crate [jpeg-encoder](https://github.com/vstroebel/jpeg-encoder); this
+software is based in part on the work of the Independent JPEG Group.
 
 ## Images in the PDF
 
@@ -1241,7 +1308,8 @@ How images go into the PDF:
 
 - JPEG as it is, compressed as JPEG. A CMYK JPEG without an ICC profile is converted to sRGB as
   Chrome draws it, instead of leaving the conversion to the viewer.
-- PNG, GIF and WebP as their pixels, compressed without loss; transparency becomes a soft mask.
+- PNG, GIF and WebP as their pixels, compressed without loss (or as JPEGs with `imageQuality()`,
+  see [Make photos smaller](#make-photos-smaller)); transparency becomes a soft mask.
   A PNG whose `gAMA` chunk Chrome corrects for is corrected the same way. An animated GIF shows
   its first frame.
 - AVIF as its pixels, decoded by Fagus, compressed without loss (see [AVIF](#avif)).
@@ -1255,8 +1323,8 @@ How images go into the PDF:
   XObject, with its text, vector graphics, fonts and images as they are in the file, as large as
   its crop box (see [Use a PDF as page template](paged-media.md#use-a-pdf-as-page-template)).
   Its links, annotations and tags are left out, and filters (`filter`, shadows) do not change it.
-- At their full resolution: Fagus does not scale images down. Scale large photos before you hand
-  them to the document.
+- At their full resolution: Fagus does not scale images down, with `imageQuality()` either.
+  Scale large photos before you hand them to the document.
 - Without interpolation (`/Interpolate`), as Chrome writes them: viewers decide how to smooth.
 
 ### AVIF

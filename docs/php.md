@@ -239,6 +239,19 @@ Fagus::html($html)->pdfA('2u');
 Fagus::html($html)->pdfA('4f');  // PDF 2.0, attachments allowed
 ```
 
+### `imageQuality(?int $quality): Document`
+
+Writes images as JPEGs of this quality, from 1 (the smallest file) to 100 (the best picture),
+which makes a PDF with photos much smaller. `null`, the default, compresses the pixels of all
+images without loss. Only images whose pixels are all opaque become a JPEG; images with
+transparent pixels, logos and charts that are smaller as they are, JPEG and SVG images stay as
+they are ([pdf.md](pdf.md#make-photos-smaller)). A quality below 1 or above 100 throws an
+`InvalidArgumentException`.
+
+```php
+Fagus::html($html)->imageQuality(80);
+```
+
 ### `tagged(bool $tagged = true): Document`
 
 Whether the PDF is tagged with the logical structure of the document (headings, paragraphs,

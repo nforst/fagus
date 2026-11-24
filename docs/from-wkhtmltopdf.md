@@ -281,7 +281,8 @@ that. Fagus lays out at CSS sizes, as Chrome prints: 1px is 1/96 inch, 12pt is 1
 | `--disable-smart-shrinking` | the default: there is no smart shrinking. Content wider than the page area is scaled down by at most 1.5 times, as Chrome's print does. |
 | `--zoom 0.8` | `html { zoom: 0.8 }` |
 | `--dpi 300` | not needed: text and shapes stay vectors; CSS pixels are 1/96 inch |
-| `--image-dpi`, `--image-quality`, `--lowquality` | not available: images are embedded at full resolution, JPEG as it is ([pdf.md](pdf.md#images-in-the-pdf)) |
+| `--image-quality` | `--image-quality`, `imageQuality()`: opaque images as JPEGs of that quality; off by default, where wkhtmltopdf's is 94 ([pdf.md](pdf.md#make-photos-smaller)) |
+| `--image-dpi`, `--lowquality` | not available: images are embedded at full resolution ([pdf.md](pdf.md#images-in-the-pdf)) |
 | `--minimum-font-size` | not available: set the sizes in CSS |
 
 After the move, check font sizes and widths: a template that wkhtmltopdf shrank can come out larger

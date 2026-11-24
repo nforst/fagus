@@ -67,8 +67,8 @@ These forward to `Fagus\Document` and take the same arguments; [php.md](php.md#d
 describes each one:
 
 `baseDirectory()`, `root()`, `stylesheet()`, `resource()`, `resolver()`, `resolveMany()`,
-`cache()`, `pdfA()`, `tagged()`, `accessible()`, `forms()`, `attach()`, `facturX()`, `encrypt()`,
-`created()`, `sign()`, `strict()`, `reportLayout()`.
+`cache()`, `pdfA()`, `tagged()`, `accessible()`, `forms()`, `imageQuality()`, `attach()`,
+`facturX()`, `encrypt()`, `created()`, `sign()`, `strict()`, `reportLayout()`.
 
 `cache()` takes a cache store, which keeps what a resolver fetched for the next PDFs
 ([resources.md](resources.md#keep-what-a-resolver-fetched-with-cache)):
@@ -446,6 +446,7 @@ This writes `config/fagus.php`. Every key, with its environment variable and def
 | `base_directory` | – | `public_path()` | The directory that relative URLs in documents resolve against. Only files inside it, or inside `root`, are read. |
 | `root` | – | `null` | A larger directory that contains `base_directory`, for documents whose URLs lead out of it (`../fonts/…`). URLs that start with `/` resolve against it. |
 | `tagged` | – | `true` | Whether PDFs are tagged with the logical structure that screen readers read. Single documents can say otherwise with `tagged()` or ask for PDF/UA with `accessible()`. |
+| `image_quality` | – | `null` | The quality (1 to 100) of the JPEGs that opaque images are written as, which makes PDFs with photos much smaller; `80` is a good value. `null` compresses all images without loss. Single documents can say otherwise with `imageQuality()` ([pdf.md](pdf.md#make-photos-smaller)). |
 | `timeout` | – | `60` | Seconds to wait for each answer of the worker before it is stopped. Not on Windows, where PHP cannot wait for a pipe with a time limit. |
 | `max_documents` | `FAGUS_MAX_DOCUMENTS` | `null` | The documents a worker process renders before it is replaced with a new one. No limit if `null` ([deployment.md](deployment.md#restart-workers)). |
 | `max_memory` | `FAGUS_MAX_MEMORY` | `null` | Megabytes of resident memory: a worker process that has more after a document is replaced with a new one (Linux, macOS and FreeBSD). No limit if `null`. |
@@ -454,7 +455,7 @@ This writes `config/fagus.php`. Every key, with its environment variable and def
 | `sandbox` | `FAGUS_SANDBOX` | `true` | Whether the worker renders in its sandbox on Linux, without network, programs or writing files ([cli.md](cli.md#sandbox)). Turn it off only to debug. |
 
 `binary`, `fonts`, `system_fonts`, `locale`, `families`, `timeout`, `max_documents`, `max_memory`, `memory_budget`, `time_limit` and `sandbox` configure the engine;
-`base_directory`, `root` and `tagged` apply to each new `PendingPdf`.
+`base_directory`, `root`, `tagged` and `image_quality` apply to each new `PendingPdf`.
 
 ```php
 // config/fagus.php

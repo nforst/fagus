@@ -89,6 +89,7 @@ document can be rendered with variations.
 | `tagged(bool)` | Whether the PDF is tagged (default `true`) |
 | `accessible()` | PDF/UA-1 |
 | `forms(bool)` | Whether form controls become the fields of an interactive form (default `false`) |
+| `image_quality(u8)` | Writes opaque images as JPEGs of this quality, 1 to 100 (default: without loss); another value fails the render with `PdfError::ImageQuality` ([pdf.md](pdf.md#make-photos-smaller)) |
 | `attach(Attachment)` | Attaches a file |
 | `factur_x(Vec<u8>)` | A ZUGFeRD / Factur-X invoice with this XML, its profile read from the XML |
 | `factur_x_profile(Vec<u8>, FacturXProfile)` | The same with the profile given |

@@ -79,7 +79,7 @@ The output. Fagus prints as Chrome does, and every release gets closer:
 If your tests compare PDFs byte by byte or as images, update the references with each release.
 
 What does not change in a minor release: the documented defaults (A4, tagged PDF, the built-in
-font, no system fonts, American English for form controls), the PDF/A levels, PDF/UA and the
+font, no system fonts, American English for form controls, images without loss), the PDF/A levels, PDF/UA and the
 invoice profiles. What is safe never changes: no network access, no files outside the root, no
 scripts.
 

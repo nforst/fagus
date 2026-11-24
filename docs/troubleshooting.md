@@ -431,6 +431,17 @@ In Laravel, set `families` in `config/fagus.php`.
 .page-break { break-before: page; }
 ```
 
+### Why is the PDF so large?
+
+Mostly because of photos. A PDF keeps the pixels of PNG, WebP and AVIF images without loss,
+which takes many times the room of a WebP or AVIF photo. `imageQuality(80)` (`--image-quality 80`,
+`image_quality` in Laravel's configuration) writes opaque images as JPEGs instead; images with
+transparent pixels stay as they are, so save photos without an alpha channel
+([pdf.md](pdf.md#make-photos-smaller)). JPEG files are embedded as they are either way. Fagus
+does not scale images down: a photo straight from a camera has far more pixels than a page
+shows, so scale it first. Without images, `tagged(false)` saves the tags of large tables
+([pdf.md](pdf.md#file-size-and-compression)).
+
 ### Can I fetch images from a URL?
 
 Not through Fagus. Hand them over with `resource()`, or answer the URLs with a `resolver()` that

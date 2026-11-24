@@ -76,6 +76,7 @@ The header of `R`; fields other than `id` and `html` may be left out:
   "tagged": true,
   "accessible": false,
   "forms": false,
+  "imageQuality": 80,
   "attachments": [{ "name": "data.csv", "mime": "text/csv", "relationship": "supplement", "description": "Rohdaten", "blob": 3 }],
   "facturX": { "blob": 4, "profile": "en16931", "version": "1.0", "description": "Factur-X/ZUGFeRD invoice" },
   "created": "2026-11-02T12:00:00Z",
@@ -113,6 +114,10 @@ The header of `R`; fields other than `id` and `html` may be left out:
   out; see [pdf.md](pdf.md#fill-in-forms)). Added in 1.0.0: a worker of an older release
   ignores it and prints the controls as they look, which the caller notices by the missing
   `forms` in `P`.
+- `imageQuality`: the quality, a whole number from 1 to 100, of the JPEGs that images whose
+  pixels are all opaque are written as (without loss if left out; see
+  [pdf.md](pdf.md#make-photos-smaller)). Another number is answered with `E`. Added in 1.2.0: a
+  worker of an older release ignores it and compresses all images without loss.
 - `attachments`: `name` and `mime` are required. `relationship` is `source`, `data`,
   `alternative`, `supplement` or `unspecified` (`unspecified` if left out). `description` may be
   left out (or be `null` or empty): PDF/A-3 and PDF/UA require one, so the worker then describes
@@ -377,3 +382,4 @@ than that ignores them:
 | `sandbox` | `H` | 1.0.0 |
 | `memoryBudget`, `timeLimit` | `R` | 1.0.0 |
 | `askMany`; the messages `Q`, `q` | `R` | 1.2.0 |
+| `imageQuality` | `R` | 1.2.0 |

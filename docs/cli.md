@@ -49,6 +49,7 @@ file as HTML.
 | `--untagged` | off | Write a PDF without tags (the logical structure screen readers read) |
 | `--accessible` | off | Write PDF/UA-1; needs a title, a language and alternative text for images |
 | `--forms` | off | Make the form controls fields of an interactive form, which readers fill in ([pdf.md](pdf.md#fill-in-forms)) |
+| `--image-quality <1-100>` | none | Write opaque images as JPEGs of this quality, which makes a PDF with photos much smaller; images with transparent pixels and those that are smaller without loss stay as they are ([pdf.md](pdf.md#make-photos-smaller)) |
 | `--attach <FILE>` | none | Attach a file; repeatable |
 | `--factur-x <FILE>` | none | Make a ZUGFeRD / Factur-X invoice with this XML |
 | `--profile <PROFILE>` | the XML's | The invoice profile: `minimum`, `basicwl`, `basic`, `en16931`, `extended` or `xrechnung` |
