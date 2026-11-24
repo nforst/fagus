@@ -14,6 +14,7 @@ mod filtered;
 pub mod foreign_layers;
 mod forms;
 mod layers;
+mod lossy;
 mod memo;
 mod non_scaling;
 pub use decode::alpha as image_alpha;
@@ -331,6 +332,11 @@ pub struct Options {
     pub encryption: Option<Encryption>,
     /// The fields of an interactive form.
     pub fields: Vec<Field>,
+    /// The quality, from 1 to 100, of the JPEGs that raster images are written as where their
+    /// pixels are all opaque (and, for an image of a format without loss, where the JPEG is
+    /// smaller than its file); another value is an error. Without one, the pixels of images are
+    /// compressed without loss. JPEG images are embedded as they are either way.
+    pub image_quality: Option<u8>,
 }
 
 /// A link on a page.
@@ -394,6 +400,9 @@ pub enum PdfError {
     Conformance { standard: String, problems: String },
     #[error("the PDF could not be signed: {0}")]
     Sign(String),
+    /// An image quality that is not from 1 to 100 ([`Options::image_quality`]).
+    #[error("the image quality must be between 1 and 100, not {0}")]
+    ImageQuality(u8),
 }
 
 /// A PDF document, written.
@@ -417,6 +426,11 @@ pub fn write(
             standard: standards(options),
             problems: "the PDF cannot be encrypted (PDF/A forbids encryption)".to_owned(),
         });
+    }
+    if let Some(quality) = options.image_quality
+        && !(1..=100).contains(&quality)
+    {
+        return Err(PdfError::ImageQuality(quality));
     }
     // Before the document is written: a missing password fails without the work.
     let mut encryptor = options
@@ -528,6 +542,7 @@ impl ImageCache {
             opaque: options
                 .conformance
                 .is_some_and(|conformance| conformance.part() == 1),
+            quality: options.image_quality,
             images: FxHashMap::default(),
             strokes: FxHashMap::default(),
             sized: FxHashMap::default(),
@@ -1292,6 +1307,9 @@ struct ImageCache {
     /// clipped away rather than drawn transparent, isolated groups are plain ones, and images
     /// whose pixels are all opaque lose their alpha channel (see [`decode::flat`]).
     opaque: bool,
+    /// The quality of the JPEGs that opaque raster images are written as (see [`lossy`]);
+    /// without one, their pixels are compressed without loss.
+    quality: Option<u8>,
     /// The images embedded so far, by their data, whether they are smoothed, and what their
     /// pixels go through (their filters, written out, and their padding).
     images: FxHashMap<(usize, bool, String), Option<Embedded>>,
@@ -1396,7 +1414,7 @@ fn embedded_image(image: &fagus_layout::Image, fonts: &FontDb, cache: &mut Image
                 };
                 let decodable = image.format != ImageFormat::Svg || drawn.is_some();
                 match decodable
-                    .then(|| decode::filtered(image, interpolate, drawn))
+                    .then(|| decode::filtered(image, interpolate, drawn, cache.quality))
                     .flatten()
                 {
                     Some(filtered) => return Some(Embedded::Raster(filtered, Arc::clone(&image.data))),
@@ -1405,24 +1423,36 @@ fn embedded_image(image: &fagus_layout::Image, fonts: &FontDb, cache: &mut Image
                 }
             }
             // PDF/A-1: an image whose pixels are all opaque goes without its alpha channel (one
-            // with transparent pixels keeps it, and is refused), and 16 bits become 8.
-            if cache.opaque
+            // with transparent pixels keeps it, and is refused), and 16 bits become 8. With an
+            // image quality, it is a JPEG where its pixels allow one (see `lossy`).
+            let flattened = cache.opaque
                 && matches!(
                     image.format,
                     ImageFormat::Png | ImageFormat::Gif | ImageFormat::Webp
-                )
-            {
-                let flat =
-                    cache
-                        .memo
-                        .get_or_prepare(&image.data, memo::Kind::Flat(image.format), None, || {
-                            memo::Prepared::Raster(decode::flat(&image.data, image.format))
-                        });
+                );
+            if flattened {
+                let kind = match cache.quality {
+                    Some(quality) => memo::Kind::Lossy {
+                        format: image.format,
+                        quality,
+                        interpolate,
+                        flat: true,
+                    },
+                    None => memo::Kind::Flat(image.format),
+                };
+                let quality = cache.quality;
+                let flat = cache.memo.get_or_prepare(&image.data, kind, None, || {
+                    memo::Prepared::Raster(
+                        quality
+                            .and_then(|quality| lossy::image(&image.data, image.format, quality, interpolate))
+                            .or_else(|| decode::flat(&image.data, image.format)),
+                    )
+                });
                 if let memo::Prepared::Raster(Some(raster)) = flat {
                     return Some(Embedded::Raster(raster, Arc::clone(&image.data)));
                 }
             }
-            let kind = match image.format {
+            let lossless = match image.format {
                 ImageFormat::Png => memo::Kind::Png(interpolate),
                 ImageFormat::Jpeg => memo::Kind::Jpeg(interpolate),
                 ImageFormat::Gif => memo::Kind::Gif(interpolate),
@@ -1437,11 +1467,29 @@ fn embedded_image(image: &fagus_layout::Image, fonts: &FontDb, cache: &mut Image
                 // Embedded above.
                 ImageFormat::Pdf(_) => return None,
             };
+            // With an image quality, an image whose pixels are all opaque is written as a JPEG;
+            // the others, and those that are smaller as they are, are prepared as without one
+            // (as is an image PDF/A-1 flattens, tried as a JPEG above).
+            let quality = cache.quality.filter(|_| !flattened);
+            let kind = match quality {
+                Some(quality) => memo::Kind::Lossy {
+                    format: image.format,
+                    quality,
+                    interpolate,
+                    flat: false,
+                },
+                None => lossless,
+            };
             // Decoding and compressing the pixels is most of the work: they are kept for the
             // next document.
             let prepared = cache.memo.get_or_prepare(&image.data, kind, None, || {
                 let data: Arc<Vec<u8>> = Arc::clone(&image.data);
-                let raster = match kind {
+                if let Some(jpeg) =
+                    quality.and_then(|quality| lossy::image(&data, image.format, quality, interpolate))
+                {
+                    return memo::Prepared::Raster(Some(jpeg));
+                }
+                let raster = match lossless {
                     memo::Kind::Png(_) => match decode::gamma_png(&data, interpolate) {
                         Some(corrected) => Some(corrected),
                         None => krilla::image::Image::from_png(data.into(), interpolate).ok(),
@@ -1452,7 +1500,10 @@ fn embedded_image(image: &fagus_layout::Image, fonts: &FontDb, cache: &mut Image
                     },
                     memo::Kind::Gif(_) => krilla::image::Image::from_gif(data.into(), interpolate).ok(),
                     memo::Kind::Decoded(format, _) => decode::decoded(&data, format, interpolate),
-                    memo::Kind::Webp(_) | memo::Kind::Flat(_) | memo::Kind::Svg { .. } => {
+                    memo::Kind::Webp(_)
+                    | memo::Kind::Flat(_)
+                    | memo::Kind::Lossy { .. }
+                    | memo::Kind::Svg { .. } => {
                         krilla::image::Image::from_webp(data.into(), interpolate).ok()
                     }
                 };
@@ -1460,7 +1511,7 @@ fn embedded_image(image: &fagus_layout::Image, fonts: &FontDb, cache: &mut Image
             });
             match prepared {
                 memo::Prepared::Raster(raster) => {
-                    if raster.is_none() && matches!(kind, memo::Kind::Decoded(..)) {
+                    if raster.is_none() && matches!(lossless, memo::Kind::Decoded(..)) {
                         cache.undecoded.push(Arc::clone(&image.data));
                     }
                     raster.map(|raster| Embedded::Raster(raster, Arc::clone(&image.data)))

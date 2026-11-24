@@ -3,7 +3,8 @@
 //! fonts), and a logo on every invoice that an engine renders is the same each time.
 //!
 //! An entry is found by the image's data, compared in full, and what else the result depends
-//! on: for a raster image its format and whether it is smoothed, for an SVG whether it is
+//! on: for a raster image its format, whether it is smoothed and the quality it is written as a
+//! JPEG with, for an SVG whether it is
 //! parsed to be drawn (see [`crate::svg::parse_to_draw`]) and, for one with text, the fonts it is
 //! parsed with. The fonts are those of the document, compared by their data's addresses; an
 //! entry holds the data, so the addresses are not reused while it lives. The memo keeps the
@@ -33,6 +34,15 @@ pub(crate) enum Kind {
     Decoded(fagus_layout::ImageFormat, bool),
     /// A raster image as PDF/A-1 can take it (see [`crate::decode::flat`]).
     Flat(fagus_layout::ImageFormat),
+    /// A raster image as a JPEG of a quality where its pixels allow one (see
+    /// [`crate::lossy::image`]), and otherwise as without the quality: as its format is prepared,
+    /// or as PDF/A-1 can take it (`flat`).
+    Lossy {
+        format: fagus_layout::ImageFormat,
+        quality: u8,
+        interpolate: bool,
+        flat: bool,
+    },
     /// An SVG document, parsed to be drawn or only for its size.
     Svg {
         draw: bool,

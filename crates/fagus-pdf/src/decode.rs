@@ -15,12 +15,26 @@ const MAX_BLURRED: usize = 25_000_000;
 /// The pixels of an image after its filters, with its padding around them, as an image to
 /// embed; `None` if it cannot be decoded. `decoded` are its pixels where they do not come from
 /// its data (an SVG image, drawn), unpremultiplied RGBA.
+/// With a `quality`, they are a JPEG of it where
+/// [`crate::lossy`] makes one.
 pub(crate) fn filtered(
     image: &fagus_layout::Image,
     interpolate: bool,
     decoded: Option<(u32, u32, Vec<u8>)>,
+    quality: Option<u8>,
 ) -> Option<Image> {
     let (width, height, pixels) = filtered_pixels(image, decoded)?;
+    // As a JPEG where the document asks for one and the pixels allow it.
+    if let Some(jpeg) = quality.and_then(|quality| {
+        crate::lossy::filtered(
+            (width, height, &pixels),
+            (&image.data, image.format),
+            quality,
+            interpolate,
+        )
+    }) {
+        return Some(jpeg);
+    }
     let mut color = Vec::with_capacity(width * height * 3);
     let mut alpha = Vec::with_capacity(width * height);
     for [r, g, b, a] in pixels.as_chunks::<4>().0 {
@@ -606,7 +620,7 @@ pub(crate) fn cmyk_jpeg(data: &[u8], interpolate: bool) -> Option<Image> {
 
 /// The RGB pixels of a CMYK JPEG without an ICC profile, as Chrome draws them (see
 /// [`cmyk_jpeg`]), and their width and height.
-fn cmyk_rgb(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
+pub(crate) fn cmyk_rgb(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
     use zune_jpeg::zune_core::colorspace::ColorSpace;
     use zune_jpeg::zune_core::options::DecoderOptions;
     let mut decoder = zune_jpeg::JpegDecoder::new(Cursor::new(data));

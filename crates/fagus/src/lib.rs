@@ -1357,6 +1357,7 @@ impl Inner {
             images: self.images.clone(),
             encryption: input.encryption.clone(),
             fields,
+            image_quality: None,
         };
         let written = match fagus_pdf::write(lists, &fonts, &metadata, &options) {
             Ok(written) => written,
