@@ -117,7 +117,7 @@ jobs:
             --target "${{ matrix.target }}" --spec-version 1.5 \
             --override-filename "fagus-${{ matrix.target }}.cdx"
           mv "crates/fagus-cli/fagus-${{ matrix.target }}.cdx.json" dist/
-      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: dist/fagus-${{ matrix.target }}*
       - uses: actions/attest-sbom@bd218ad0dbcb3e146bd073d1d9c6d78e08aa8a0b # v2.4.0
@@ -188,7 +188,7 @@ jobs:
           cargo cyclonedx --manifest-path crates/fagus-ffi/Cargo.toml --format json --all \
             --target "${{ matrix.target }}" --spec-version 1.5 --override-filename "$NAME.cdx"
           mv "crates/fagus-ffi/$NAME.cdx.json" dist/
-      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: dist/${{ env.NAME }}*
       - uses: actions/attest-sbom@bd218ad0dbcb3e146bd073d1d9c6d78e08aa8a0b # v2.4.0
@@ -244,7 +244,7 @@ jobs:
       - name: Sum
         working-directory: dist
         run: sha256sum fagus-* > SHA256SUMS && cat SHA256SUMS
-      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: dist/SHA256SUMS
       # The licenses of the code and data of others in the binaries (tools/notices.sh).
