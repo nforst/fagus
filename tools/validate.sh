@@ -19,6 +19,8 @@
 # and checked against their SHA-256, unless VERAPDF (the verapdf script), MUSTANG (the Mustang CLI
 # jar) or QPDF (the qpdf binary) name others. veraPDF and Mustang need Java 11 or later.
 # FAGUS names the binary (default target/release/fagus), JOBS the number of renders at once.
+# FAGUS_OPTIONS holds further options for every render, separated by spaces, such as
+# "--page-mode attachments --zoom fit-width" to check the files with an initial view.
 #
 # Pages that Fagus refuses for a level (images without alternative text, headings that do not
 # start at h1, characters that the fonts in tests/fonts lack) are left out; the message says why.
@@ -172,11 +174,12 @@ render() { # variant name page
     *) options=(--pdfa "$1") ;;
   esac
   # The root is tests/, so that pages may use the fonts and images next to the corpus.
+  # shellcheck disable=SC2086 # FAGUS_OPTIONS is split into its options
   FAGUS_SIGN_PASSWORD=fagus-test-only "$fagus" render "$3" -o "$pdfs/$2.$1.pdf" --font-dir "$fonts" \
-    --root "$root/tests" ${options[@]+"${options[@]}"} 2> "$pdfs/$2.$1.log" || true
+    --root "$root/tests" ${options[@]+"${options[@]}"} ${FAGUS_OPTIONS:-} 2> "$pdfs/$2.$1.log" || true
 }
 export -f render
-export fagus fonts root xml pdfs
+export fagus fonts root xml pdfs FAGUS_OPTIONS=${FAGUS_OPTIONS:-}
 xargs -P "$jobs" -L 1 bash -c 'render "$@"' _ < "$out/renders.txt"
 
 # The files for each veraPDF profile, and the refusals.
