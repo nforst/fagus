@@ -50,7 +50,7 @@ final readonly class PdfFactory
     }
 
     /**
-     * A document with the base directory, root and tagging of the configuration.
+     * A document with the base directory, root, tagging and image quality of the configuration.
      */
     private function pending(Document $document): PendingPdf
     {
@@ -61,6 +61,9 @@ final readonly class PdfFactory
             $document = $document->root($this->config['root']);
         }
         $document = $document->tagged(($this->config['tagged'] ?? true) !== false);
+        if (is_numeric($this->config['image_quality'] ?? null)) {
+            $document = $document->imageQuality((int) $this->config['image_quality']);
+        }
 
         return new PendingPdf($this->engine, $document);
     }

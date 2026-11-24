@@ -95,6 +95,11 @@ final class PendingPdf implements Responsable
         return $this->with($this->document->forms($forms));
     }
 
+    public function imageQuality(?int $quality): self
+    {
+        return $this->with($this->document->imageQuality($quality));
+    }
+
     public function attach(
         string $name,
         string $data,

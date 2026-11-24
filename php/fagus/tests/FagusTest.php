@@ -287,6 +287,42 @@ final class FagusTest extends TestCase
     }
 
     #[Test]
+    public function it_writes_images_as_jpegs_of_a_quality(): void
+    {
+        $photo = (string) file_get_contents(__DIR__.'/../../../tests/corpus/images/photo.webp');
+        $document = Fagus::html('<!doctype html><img src="photo.webp" width="200">')->resource('photo.webp', $photo)
+            ->created(new DateTimeImmutable('2026-11-02T12:00:00Z'));
+        $lossless = $document->render()->bytes();
+        $this->assertStringNotContainsString('/DCTDecode', $lossless, 'without loss by default');
+
+        $jpeg = $document->imageQuality(80);
+        $this->assertNotSame($document, $jpeg);
+        [$header] = $jpeg->request(1);
+        $this->assertSame(80, $header['imageQuality']);
+        [$header] = $document->request(1);
+        $this->assertArrayNotHasKey('imageQuality', $header);
+        [$header] = $jpeg->imageQuality(null)->request(1);
+        $this->assertArrayNotHasKey('imageQuality', $header);
+
+        $bytes = $jpeg->render()->bytes();
+        $this->assertStringContainsString('/DCTDecode', $bytes);
+        $this->assertLessThan(strlen($lossless) / 3, strlen($bytes));
+        $this->assertLessThan(strlen($bytes), strlen($document->imageQuality(30)->render()->bytes()));
+        $this->assertSame($lossless, $jpeg->imageQuality(null)->render()->bytes());
+
+        foreach ([0, 101, -5] as $quality) {
+            try {
+                $document->imageQuality($quality);
+                $this->fail("The quality {$quality} was taken.");
+            } catch (InvalidArgumentException $exception) {
+                $this->assertSame("The image quality must be between 1 and 100 or null, not {$quality}.", $exception->getMessage());
+            }
+        }
+        $this->assertStringContainsString('/DCTDecode', $document->imageQuality(1)->render()->bytes());
+        $this->assertStringContainsString('/DCTDecode', $document->imageQuality(100)->render()->bytes());
+    }
+
+    #[Test]
     public function it_saves_files(): void
     {
         $path = sys_get_temp_dir().DIRECTORY_SEPARATOR.'fagus '.bin2hex(random_bytes(6)).'.pdf';

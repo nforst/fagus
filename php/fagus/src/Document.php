@@ -50,6 +50,8 @@ final class Document
 
     private bool $forms = false;
 
+    private ?int $imageQuality = null;
+
     /** @var list<array{name: string, data: string, mime: string, relationship: Relationship, description: ?string}> */
     private array $attachments = [];
 
@@ -228,6 +230,27 @@ final class Document
     {
         $copy = clone $this;
         $copy->accessible = $accessible;
+
+        return $copy;
+    }
+
+    /**
+     * Writes images as JPEGs of this quality, from 1 (smallest) to 100 (best), which makes a PDF
+     * with photos much smaller: 80 is a good value for the screen and office printers. Only
+     * images whose pixels are all opaque become a JPEG; those with transparent pixels, and
+     * images of formats without loss (PNG, GIF, lossless WebP) that are smaller as they are, as
+     * logos and charts, stay as they are, and so do JPEG and SVG images. `null`, the default,
+     * compresses the pixels of all images without loss.
+     *
+     * @throws InvalidArgumentException for a quality below 1 or above 100
+     */
+    public function imageQuality(?int $quality): self
+    {
+        if ($quality !== null && ($quality < 1 || $quality > 100)) {
+            throw InvalidArgumentException::imageQuality($quality);
+        }
+        $copy = clone $this;
+        $copy->imageQuality = $quality;
 
         return $copy;
     }
@@ -470,6 +493,9 @@ final class Document
         }
         if ($this->forms) {
             $header['forms'] = true;
+        }
+        if ($this->imageQuality !== null) {
+            $header['imageQuality'] = $this->imageQuality;
         }
         foreach ($this->attachments as $attachment) {
             $header['attachments'][] = [

@@ -59,6 +59,14 @@ return [
     'tagged' => true,
 
     /*
+    | The quality (1 to 100) of the JPEGs that opaque images are written as, which makes PDFs with
+    | photos much smaller; 80 is a good value. Images with transparent pixels, and logos and
+    | charts that are smaller as they are, stay as they are. null compresses all images without
+    | loss. Single documents can say otherwise with imageQuality().
+    */
+    'image_quality' => null,
+
+    /*
     | Seconds to wait for each answer of the worker before it is stopped. Not on Windows, where
     | PHP cannot wait for a pipe with a time limit.
     */

@@ -264,6 +264,28 @@ final class FagusTest extends TestCase
         $this->assertTrue($tagged(Fagus::html('<p>Hallo</p>')->tagged()));
     }
 
+    #[Test]
+    public function it_writes_images_as_jpegs_of_the_configured_quality(): void
+    {
+        $photo = (string) file_get_contents(__DIR__.'/../../../tests/corpus/images/photo.webp');
+        $jpeg = static fn (PendingPdf $pdf): bool => str_contains($pdf->resource('photo.webp', $photo)->render()->bytes(), '/DCTDecode');
+        $html = '<!doctype html><img src="photo.webp" width="200">';
+
+        $this->assertNull($this->app['config']->get('fagus.image_quality'));
+        $this->assertFalse($jpeg(Fagus::html($html)), 'without loss by default');
+        $this->assertTrue($jpeg(Fagus::html($html)->imageQuality(80)));
+
+        $this->app['config']->set('fagus.image_quality', 75);
+        $this->app->forgetInstance('fagus');
+        $this->app->forgetInstance(PdfFactory::class);
+        Fagus::clearResolvedInstances();
+
+        [$header] = Fagus::html($html)->document()->request(1);
+        $this->assertSame(75, $header['imageQuality']);
+        $this->assertTrue($jpeg(Fagus::html($html)));
+        $this->assertFalse($jpeg(Fagus::html($html)->imageQuality(null)));
+    }
+
     /**
      * The bytes of a PDF followed by the decoded contents of its object streams.
      */
