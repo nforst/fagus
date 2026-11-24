@@ -5,10 +5,23 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Changed
+
+- The Composer plugin warns when it installs the binary for a development version of the package (a branch such as `dev-main`): a branch lists the binaries of the last release, so the binary is that release's and may not know what the branch added. The installation succeeds as before, also with `FAGUS_INSTALL_STRICT`; build the binary from the branch and set `FAGUS_BINARY` to use it.
+- The FreeBSD binary, built on FreeBSD 14, is now tested on FreeBSD 15 too: CI renders documents with it there, and the release workflow runs the release's binary on FreeBSD 15 before it drafts the release.
+- The workflows name their actions by commit instead of by tag, and Dependabot proposes their updates.
+
 ### Fixed
 
 - `@supports (position: running(x))` is true, as running elements work; it was false, so a stylesheet could not lay them out only where they are supported ([#4](https://github.com/nforst/fagus/issues/4)).
 - A box with `break-inside: avoid` that does not fit after a heading with `break-after: avoid` at the top of a page breaks inside, below the heading, as in Chrome: both breaks violate an `avoid`, and the later one wins. Fagus broke after the heading instead and left it alone on its page, also where the box was taller than a page and broke on the next one all the same ([#5](https://github.com/nforst/fagus/issues/5)).
+- Where strict installation (`FAGUS_INSTALL_STRICT`, `extra.fagus.install-strict`) fails Composer because a copy of the package lists no binaries, the error names the way out, `FAGUS_INSTALL_STRICT=0` with a binary of your own in `FAGUS_BINARY`; it pointed to `vendor/bin/fagus-install`, which fails for the same reason.
+
+### Documentation
+
+- Text without a `font-family` is set in the `serif` family, which without fonts of your own is the built-in Inter and with them the first font of your font directories. That was only in a table of [fonts.md](docs/fonts.md#set-the-generic-families); getting started, the Laravel configuration, troubleshooting, the wkhtmltopdf guide and the README say it now, and the Blade example sets a `font-family`.
+- A recipe for a header and footer from Blade partials, with running elements and page numbers ([laravel.md](docs/laravel.md#put-a-blade-partial-in-the-header-and-footer)).
+- What the Composer plugin does for a branch is described as it is: troubleshooting, deployment and releasing said that a branch gets no binary.
 
 ## [1.1.0] - 2026-11-20
 
