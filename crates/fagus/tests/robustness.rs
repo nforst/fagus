@@ -40,6 +40,14 @@ fn a_document_without_a_root_box_has_a_page() {
 }
 
 #[test]
+fn renders_text_at_absurd_font_sizes() {
+    // The advance of a glyph is taken in fixed point as FreeType scales it, whose products were
+    // past 64 bits: a panic where overflow is checked, any advance where it is not.
+    renders("<p style='font-size: 1e30px; line-height: 0'>x</p>");
+    renders("<p style='font-size: 1e15px; line-height: 0; letter-spacing: 1e30px'>AV fi</p>");
+}
+
+#[test]
 fn renders_clip_shapes_too_large_to_draw() {
     // The clip was left out but its end was not, which krilla could not pop.
     renders("<div style='clip-path: circle(1e30px)'>x</div>");

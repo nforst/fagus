@@ -485,9 +485,10 @@ impl Face {
         }
         let size = size * self.size_adjust;
         #[allow(clippy::cast_possible_truncation, reason = "font units of an em")]
-        let units_per_em = (self.metrics.units_per_em as i64).max(1);
-        // `FreeType`'s rounding fixed-point arithmetic (`FT_MulDiv`, `FT_DivFix`).
-        let mul_div = |a: i64, b: i64, c: i64| {
+        let units_per_em = (self.metrics.units_per_em as i128).max(1);
+        // `FreeType`'s rounding fixed-point arithmetic (`FT_MulDiv`, `FT_DivFix`), in integers
+        // wide enough for any font size: at `font-size: 1e30px` the products are past 64 bits.
+        let mul_div = |a: i128, b: i128, c: i128| {
             let product = a * b;
             let half = c / 2;
             if product < 0 {
@@ -502,8 +503,8 @@ impl Face {
         )]
         let own = {
             let size = (f64::from(size) * 64.0) as i64;
-            let x_scale = mul_div(size, 0x10000, units_per_em);
-            mul_div(f64::from(glyph.own_advance).round() as i64, x_scale, 64)
+            let x_scale = mul_div(i128::from(size), 0x10000, units_per_em);
+            mul_div(f64::from(glyph.own_advance).round() as i128, x_scale, 64)
         };
         #[allow(
             clippy::cast_possible_truncation,
@@ -511,8 +512,8 @@ impl Face {
         )]
         let positioned = {
             let scale = (f64::from(size) * 65536.0).trunc() as i64;
-            let multiplier = (scale << 16) / units_per_em;
-            let delta = f64::from(glyph.x_advance - glyph.own_advance).round() as i64;
+            let multiplier = (i128::from(scale) << 16) / units_per_em;
+            let delta = f64::from(glyph.x_advance - glyph.own_advance).round() as i128;
             (delta * multiplier + 32768) >> 16
         };
         #[allow(
