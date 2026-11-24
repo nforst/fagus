@@ -55,8 +55,8 @@ mod wpt_tests;
 mod zoom;
 
 pub use cascade::{
-    ContainerSizes, PseudoKey, StyledDocument, compute_styles, compute_styles_in, compute_styles_with,
-    style_from_declarations,
+    ContainerSizes, PseudoKey, StringSet, StyledDocument, compute_styles, compute_styles_in,
+    compute_styles_with, style_from_declarations,
 };
 pub use controls::{MeterRegion, meter_value, progress_fraction};
 pub use extra::font_face_features;
@@ -1809,6 +1809,36 @@ mod tests {
                 .pseudo(node("s"), PseudoKey::ScrollButton(ScrollDirection::BlockEnd))
                 .is_none()
         );
+    }
+
+    #[test]
+    fn finds_the_string_sets_of_elements_in_an_element_with_display_none() {
+        fn id(document: &Document, id: &str) -> NodeId {
+            document
+                .descendants(NodeId::DOCUMENT)
+                .find(|&node| {
+                    document
+                        .element(node)
+                        .is_some_and(|data| data.id.as_deref() == Some(id))
+                })
+                .expect("element")
+        }
+        // The elements in one with `display: none` have no styles; where the document sets
+        // named strings, those of them that do are listed in document order.
+        let html = "<div id=a class=none><p id=b><i id=c class=set></i></p><i id=d class=set></i></div>";
+        let (document, styled) = styles(html, ".none { display: none } .set { string-set: t content() }");
+        let found: Vec<NodeId> = styled
+            .hidden_string_sets(id(&document, "a"))
+            .iter()
+            .map(|(element, _)| *element)
+            .collect();
+        assert_eq!(found, [id(&document, "c"), id(&document, "d")]);
+        assert!(styled.style(id(&document, "b")).is_none());
+        assert!(styled.style(id(&document, "c")).is_none());
+        assert_eq!(styled.hidden_string_sets(id(&document, "b")), []);
+        // Without `string-set` in the document, they are not looked at.
+        let (document, styled) = styles(html, ".none { display: none }");
+        assert_eq!(styled.hidden_string_sets(id(&document, "a")), []);
     }
 
     #[test]

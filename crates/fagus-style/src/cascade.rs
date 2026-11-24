@@ -571,9 +571,15 @@ fn rejected(name: &str, tokens: &TokenList<'static>) -> bool {
 pub struct StyledDocument {
     styles: Vec<Option<Arc<ComputedStyle>>>,
     pseudo: FxHashMap<(NodeId, PseudoKey), Arc<ComputedStyle>>,
+    /// The named strings that the descendants of each element with `display: none` set (see
+    /// [`StyledDocument::hidden_string_sets`]).
+    hidden_strings: FxHashMap<NodeId, Vec<(NodeId, StringSet)>>,
     /// The styles, charged to the budget of the render while they live.
     held: fagus_dom::budget::Held,
 }
+
+/// The value of `string-set`: the names with the content of each.
+pub type StringSet = Vec<(String, Vec<crate::values::ContentItem>)>;
 
 /// The pseudo-elements with their own style.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -633,6 +639,38 @@ impl StyledDocument {
     pub fn all(&self) -> impl Iterator<Item = &Arc<ComputedStyle>> {
         self.styles.iter().flatten().chain(self.pseudo.values())
     }
+
+    /// The descendants of `hidden`, an element with `display: none`, that set named strings,
+    /// in document order, each with its `string-set`. They have no styles otherwise: the
+    /// content of an element with `display: none` is not rendered. CSS Generated Content for
+    /// Paged Media 3 (§1.1.1) has such an element assign its strings where its box would have
+    /// been and does not say whether the elements in it do; here they do, in the same place.
+    pub fn hidden_string_sets(&self, hidden: NodeId) -> &[(NodeId, StringSet)] {
+        self.hidden_strings.get(&hidden).map_or(&[], Vec::as_slice)
+    }
+}
+
+/// Whether a rule or a `style` attribute declares `string-set`: only then are the elements in
+/// one with `display: none` styled, for the strings they set.
+fn sets_strings(document: &Document, rules: &RuleSet) -> bool {
+    let declares = |block: &fagus_css::DeclarationBlock| {
+        block
+            .declarations
+            .iter()
+            .chain(&block.important_declarations)
+            .any(|property| property.property_id().name() == "string-set")
+    };
+    // (The rules of a selector list share their declarations.)
+    let mut last = std::ptr::null();
+    rules.rules().iter().any(|rule| {
+        let block = Arc::as_ptr(&rule.declarations);
+        !std::ptr::eq(std::mem::replace(&mut last, block), block) && declares(&rule.declarations)
+    }) || document.descendants(NodeId::DOCUMENT).any(|node| {
+        document
+            .element(node)
+            .and_then(|data| data.attribute("style"))
+            .is_some_and(|css| css.to_ascii_lowercase().contains("string-set"))
+    })
 }
 
 /// Computes the styles of all elements.
@@ -956,11 +994,17 @@ pub fn compute_styles_with(
     let mut styled = StyledDocument {
         styles: vec![None; document.len()],
         pseudo: FxHashMap::default(),
+        hidden_strings: FxHashMap::default(),
         held: fagus_dom::budget::hold(
             fagus_dom::budget::Kind::Styles,
             (document.len() * size_of::<Option<Arc<ComputedStyle>>>()) as u64,
         ),
     };
+    // The styles of the elements in one with `display: none`, computed only for the named
+    // strings they set and kept while styles are computed (see `SharedStyles::classes`).
+    let strings = sets_strings(document, rules);
+    let mut hidden_styles: Vec<Arc<ComputedStyle>> = Vec::new();
+    let mut hidden_held = fagus_dom::budget::hold(fagus_dom::budget::Kind::Styles, 0);
     let registry = Registry::new(rules.property_rules());
     let mut expansions = Expansions::new(rules);
     // Custom properties of `style` attributes that refer to their element pass on to children.
@@ -1396,6 +1440,55 @@ pub fn compute_styles_with(
             let children: Vec<NodeId> = document.child_elements(element).collect();
             for child in children.into_iter().rev() {
                 stack.push((child, Arc::clone(&style), Arc::clone(&chain)));
+            }
+        } else if strings {
+            // The elements inside set their named strings where this one does (see
+            // `StyledDocument::hidden_string_sets`): they get styles for that alone, without
+            // pseudo-elements.
+            let mut found = Vec::new();
+            let mut inside: Vec<(NodeId, Arc<ComputedStyle>)> = document
+                .child_elements(element)
+                .map(|child| (child, Arc::clone(&style)))
+                .collect();
+            inside.reverse();
+            while let Some((element, parent)) = inside.pop() {
+                fagus_dom::budget::check_time();
+                let containers = Containers {
+                    chain: &chain,
+                    sizes,
+                    parent: &parent,
+                    registry: &registry,
+                };
+                let (style, class) = compute_element(
+                    document,
+                    rules,
+                    &containers,
+                    (&expansions, &registry, &units),
+                    (&mut hints, &mut shared),
+                    &ancestors,
+                    element,
+                    &parent,
+                    root_font_size,
+                    viewport,
+                    false,
+                );
+                let style = Arc::new(style);
+                shared.classes.insert(Arc::as_ptr(&style) as usize, class);
+                hidden_held.add(HANDLE + VALUES);
+                if !style.string_set.is_empty() {
+                    found.push((element, style.string_set.clone()));
+                }
+                let children: Vec<NodeId> = document.child_elements(element).collect();
+                inside.extend(
+                    children
+                        .into_iter()
+                        .rev()
+                        .map(|child| (child, Arc::clone(&style))),
+                );
+                hidden_styles.push(style);
+            }
+            if !found.is_empty() {
+                styled.hidden_strings.insert(element, found);
             }
         }
         // The styles of the element's pseudo-elements, each built for it.

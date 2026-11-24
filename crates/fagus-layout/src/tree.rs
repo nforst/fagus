@@ -2494,7 +2494,7 @@ impl Builder<'_> {
         // Named strings take the values the element has here, its counters included, after
         // those of the elements without a box before it.
         let mut values = self.deferred_strings.take();
-        values.extend(self.string_values(element, style));
+        values.extend(self.string_values(element, &style.string_set));
         // An element with `display: contents` and a line break have no box of their own: the
         // next element's box assigns their strings.
         if style.display == Display::Contents || data.is_some_and(|data| data.is("br") || data.is("wbr")) {
@@ -2511,18 +2511,26 @@ impl Builder<'_> {
 
     /// The named strings an element with `display: none` sets: they are assigned where its box
     /// would have been (CSS GCPM 3, §1.1.1), which is where the next element's box starts. Its
-    /// counters do not change (CSS Display 3, §2.5).
+    /// counters do not change (CSS Display 3, §2.5). The elements in it set theirs in the same
+    /// place, in document order, which the specification leaves open (csswg-drafts #8404): a
+    /// `<title>` in the `<head>` can name the document.
     fn defer_strings(&self, element: NodeId, style: &ComputedStyle) {
-        let values = self.string_values(element, style);
+        let mut values = self.string_values(element, &style.string_set);
+        for (inside, string_set) in self.styled.hidden_string_sets(element) {
+            values.extend(self.string_values(*inside, string_set));
+        }
         self.deferred_strings.borrow_mut().extend(values);
     }
 
     /// The values of the named strings `element` sets with `string-set`, taken where the box tree
     /// has come to: the counters as they are there, the page counters left for the page the
     /// element goes on.
-    fn string_values(&self, element: NodeId, style: &ComputedStyle) -> Vec<(Arc<str>, StringValue)> {
-        style
-            .string_set
+    fn string_values(
+        &self,
+        element: NodeId,
+        string_set: &[(String, Vec<ContentItem>)],
+    ) -> Vec<(Arc<str>, StringValue)> {
+        string_set
             .iter()
             .map(|(name, items)| {
                 let mut value = StringValue::default();

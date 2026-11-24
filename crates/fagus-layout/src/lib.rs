@@ -605,6 +605,58 @@ mod tests {
     }
 
     #[test]
+    fn assigns_the_named_strings_of_the_title_in_the_head() {
+        // The `<head>` has `display: none`: the `<title>` in it sets its string where the box of
+        // the `<head>` would be, at the start of the document.
+        let pages = render(
+            "<!doctype html><html><head><title>Bericht 2026</title>
+             <style>
+               @page { @top-left { content: string(doctitle); } }
+               title { string-set: doctitle content(); }
+               body { font-family: Inter }
+               p::before { content: string(doctitle) ': ' }
+               .break { break-before: page; }
+             </style></head>
+             <body><p>a</p><p class=break>b</p></body></html>",
+        );
+        assert_eq!(pages.len(), 2);
+        assert_eq!(margin_text(&pages[0]), "Bericht 2026|");
+        assert_eq!(margin_text(&pages[1]), "Bericht 2026|");
+        assert_eq!(content_lines(&pages)[1], ["Bericht 2026: b"]);
+    }
+
+    #[test]
+    fn assigns_the_named_strings_of_elements_in_an_element_without_a_box() {
+        // The elements in one with `display: none` set their strings where it sets its own, after
+        // it and in document order, however deep they are and whatever their own `display`.
+        // Their counters do not change, as the counters of the element do not.
+        let pages = render(
+            "<style>
+               @page { @top-left { content: string(t, first) ' ' string(t, last) ' ' string(u); }
+                       @top-right { content: string(v); } }
+               body { font-family: Inter; counter-reset: n }
+               .none { display: none }
+               .meta * { counter-increment: n }
+               p::before { content: counter(n) ' ' string(t) ' ' }
+               .break { break-before: page; }
+             </style>
+             <p>a</p>
+             <div class='none meta' style='string-set: t \"A\"'>
+               <div class=none style='string-set: t \"B\"'>
+                 <span style='string-set: u content() \" \" counter(n)'>C</span>
+               </div>
+               <i style='string-set: t \"D\", v attr(title)' title=E></i>
+             </div>
+             <p class=break>b</p>
+             <div class=none><b style='string-set: t \"F\"'></b></div>",
+        );
+        assert_eq!(pages.len(), 2);
+        assert_eq!(margin_text(&pages[0]), "");
+        assert_eq!(margin_text(&pages[1]), "A F C 0|E|");
+        assert_eq!(content_lines(&pages), [["0  a"], ["0 D b"]]);
+    }
+
+    #[test]
     fn assigns_the_named_strings_of_elements_without_a_box_of_their_own_at_the_next_box() {
         for (html, expected) in [
             (

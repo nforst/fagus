@@ -485,8 +485,21 @@ the string, `string()` shows it.
 `counter(page)` and `counter(pages)` in it are the number of the page the element is on and the page
 count: `string-set: chapter content() ", page " counter(page)` keeps the page where the chapter
 starts on the pages after it. An element with `display: none` sets its strings too, where its box
-would be, so a hidden element can name the chapter without printing. `string()` takes a second
-argument for the case that the string is set several times on a page:
+would be, so a hidden element can name the chapter without printing. The elements inside it set
+theirs in the same place, in document order; counters do not change in a hidden element. The
+`<head>` is such an element, so the title of the document can go into the header:
+
+```css
+title { string-set: doctitle content(); }
+@page { @top-left { content: string(doctitle); } }
+```
+
+The specification says this for the element with `display: none` itself and leaves open what the
+elements inside it do ([csswg-drafts #8404](https://github.com/w3c/csswg-drafts/issues/8404)); that
+they set their strings is how Fagus reads it, and other engines may ignore them. `content(before)`,
+`content(after)` and `content(marker)` of an element inside a hidden one are empty.
+
+`string()` takes a second argument for the case that the string is set several times on a page:
 
 | Value | Shows |
 |---|---|
