@@ -108,6 +108,8 @@ enum Command {
         #[command(flatten)]
         encryption: EncryptionArgs,
         #[command(flatten)]
+        view: ViewArgs,
+        #[command(flatten)]
         sign: Sign,
         #[command(flatten)]
         limits: LimitArgs,
@@ -147,6 +149,65 @@ enum Command {
         #[command(flatten)]
         confinement: Confinement,
     },
+}
+
+/// How a viewer shows the PDF when it opens it. Viewers follow it to different degrees.
+#[derive(clap::Args)]
+struct ViewArgs {
+    /// What a viewer shows beside the pages when it opens the PDF.
+    #[arg(
+        long,
+        value_name = "MODE",
+        value_parser = ["none", "outlines", "thumbnails", "full-screen", "attachments", "layers"]
+    )]
+    page_mode: Option<String>,
+    /// How a viewer lays the pages out when it opens the PDF.
+    #[arg(
+        long,
+        value_name = "LAYOUT",
+        value_parser = ["single-page", "one-column", "two-column-left", "two-column-right", "two-page-left", "two-page-right"]
+    )]
+    page_layout: Option<String>,
+    /// How large a viewer shows the pages when it opens the PDF: `fit-page`, `fit-width` or a
+    /// number of percent, like 150.
+    #[arg(long, value_parser = zoom)]
+    zoom: Option<fagus::Zoom>,
+    /// The page a viewer opens the PDF at, counted from 1.
+    #[arg(long, value_name = "PAGE")]
+    open_page: Option<usize>,
+}
+
+/// The zoom of `--zoom`.
+fn zoom(text: &str) -> Result<fagus::Zoom, String> {
+    request::zoom(text)
+        .ok_or_else(|| "expected `fit-page`, `fit-width` or a number of percent above 0".to_owned())
+}
+
+impl ViewArgs {
+    /// The initial view the arguments ask for, if any.
+    fn view(self) -> Option<fagus::InitialView> {
+        if self.page_mode.is_none()
+            && self.page_layout.is_none()
+            && self.zoom.is_none()
+            && self.open_page.is_none()
+        {
+            return None;
+        }
+        let mut view = fagus::InitialView::new();
+        if let Some(mode) = self.page_mode.as_deref().and_then(fagus::PageMode::from_name) {
+            view = view.page_mode(mode);
+        }
+        if let Some(layout) = self.page_layout.as_deref().and_then(fagus::PageLayout::from_name) {
+            view = view.page_layout(layout);
+        }
+        if let Some(zoom) = self.zoom {
+            view = view.zoom(zoom);
+        }
+        if let Some(page) = self.open_page {
+            view = view.page(page);
+        }
+        Some(view)
+    }
 }
 
 /// Password protection. Arguments of a process are visible to other users of the machine, so the
@@ -507,6 +568,7 @@ fn main() -> Result<()> {
             repeat,
             created,
             encryption,
+            view,
             sign,
             limits,
             confinement,
@@ -600,6 +662,9 @@ fn main() -> Result<()> {
             // Before the sandbox: the password files may be anywhere.
             if let Some(encryption) = encryption.encryption()? {
                 document = document.encrypt(encryption);
+            }
+            if let Some(view) = view.view() {
+                document = document.initial_view(view);
             }
             // Before the sandbox: the PKCS#12 file and its password file may be anywhere.
             if let Some(signature) = sign.signature()? {
@@ -794,6 +859,56 @@ mod tests {
 
     fn encryption(arguments: &[&str]) -> Result<Option<fagus::Encryption>> {
         encryption_in(arguments, &[])
+    }
+
+    #[test]
+    fn takes_the_initial_view() {
+        let view = |arguments: &[&str]| {
+            let cli = Cli::try_parse_from(
+                ["fagus", "render", "a.html", "-o", "a.pdf"]
+                    .iter()
+                    .chain(arguments),
+            )?;
+            let Command::Render { view, .. } = cli.command else {
+                panic!("not render");
+            };
+            Ok::<_, clap::Error>(view.view())
+        };
+        assert_eq!(view(&[]).expect("parsed"), None);
+        assert_eq!(
+            view(&[
+                "--page-mode",
+                "full-screen",
+                "--page-layout",
+                "two-page-right",
+                "--zoom",
+                "fit-width",
+                "--open-page",
+                "3"
+            ])
+            .expect("parsed"),
+            Some(
+                fagus::InitialView::new()
+                    .page_mode(fagus::PageMode::FullScreen)
+                    .page_layout(fagus::PageLayout::TwoPageRight)
+                    .zoom(fagus::Zoom::FitWidth)
+                    .page(3)
+            )
+        );
+        assert_eq!(
+            view(&["--zoom", "62.5"]).expect("parsed"),
+            Some(fagus::InitialView::new().zoom(fagus::Zoom::Percent(62.5)))
+        );
+        for wrong in [
+            &["--zoom", "0"][..],
+            &["--zoom", "wide"],
+            &["--zoom", "inf"],
+            &["--page-mode", "bookmarks"],
+            &["--page-layout", "two"],
+            &["--open-page", "-1"],
+        ] {
+            assert!(view(wrong).is_err(), "{wrong:?}");
+        }
     }
 
     fn encryption_in(arguments: &[&str], environment: &[(&str, &str)]) -> Result<Option<fagus::Encryption>> {

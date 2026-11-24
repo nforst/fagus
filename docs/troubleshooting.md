@@ -350,6 +350,7 @@ first `<style>` element, the URL of a linked or imported stylesheet, the name gi
 | `limit.time` | The document took longer than its time limit and is not rendered (severity `error`). |
 | `pdf.layers-unsupported` | PDF/A-1 has no layers: what `-fagus-layer` puts on one is printed as if it had none ([extensions.md](extensions.md#layers-that-show-on-screen-or-in-print)). |
 | `pdf.layer-shown` | PDF/A and PDF/UA do not let layers depend on printing: a layer with `screen` or `print` shows in both. |
+| `pdf.view-ignored` | Part of the initial view is left out: a page mode or page layout that PDF/A-1b (PDF 1.4) does not have, a page to open at that the document does not have, or a zoom that is not a positive number ([pdf.md](pdf.md#choose-how-the-pdf-opens)). |
 | `pdf.conformance-raised` | Factur-X needs PDF/A-3; a PDF/A-2 level was raised to the PDF/A-3 level of the same letter, PDF/A-1b to PDF/A-3b. |
 | `invoice.profile-mismatch` | The invoice XML declares another profile than the one given. |
 | `invoice.profile-unknown` | The invoice XML declares no Factur-X profile. |

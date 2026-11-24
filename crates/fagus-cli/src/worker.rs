@@ -620,6 +620,60 @@ mod tests {
     }
 
     #[test]
+    fn writes_the_initial_view() {
+        let mut input = Vec::new();
+        for (id, view) in [
+            (
+                1,
+                json!({ "pageMode": "outlines", "pageLayout": "one-column", "zoom": "fit-width", "page": 2,
+                        "fitWindow": true, "centerWindow": true }),
+            ),
+            (2, json!({ "zoom": 150 })),
+            (3, Value::Null),
+            (4, json!({})),
+            (5, json!({ "page": 3, "zoom": 62.5 })),
+            (6, json!({ "pageMode": "bookmarks" })),
+            (7, json!({ "pageLayout": "two" })),
+            (8, json!({ "zoom": 0 })),
+            (9, json!({ "zoom": "wide" })),
+        ] {
+            input.extend(frame(
+                RENDER,
+                // PDF/A-1b has no object streams: the catalog is there to read.
+                &json!({ "id": id, "html": 0, "view": view, "conformance": "1b", "created": "2026-11-25T12:00:00Z" }),
+                &[b"<title>Handbuch</title><p>Eins<p style='break-before: page'>Zwei"],
+            ));
+        }
+        let output = Shared::default();
+        serve(engine(), io::Cursor::new(input), output.clone()).expect("served");
+        let output = output.0.lock().expect("lock").clone();
+        let frames = frames(&output);
+        let kinds: String = frames.iter().map(|frame| char::from(frame.kind)).collect();
+        assert_eq!(kinds, "HPPPPPEEEE");
+        let has = |pdf: &[u8], text: &str| pdf.windows(text.len()).any(|window| window == text.as_bytes());
+        let first = &frames[1].blobs[0];
+        for entry in [
+            "/ViewerPreferences<</DisplayDocTitle true/FitWindow true/CenterWindow true>>",
+            "/PageMode/UseOutlines",
+            "/PageLayout/OneColumn",
+            "/FitH 841.92]",
+        ] {
+            assert!(has(first, entry), "{entry}");
+        }
+        assert!(has(&frames[2].blobs[0], "/XYZ null 841.92 1.5]"));
+        // No view and an empty one are the same file.
+        assert!(!has(&frames[3].blobs[0], "/OpenAction"));
+        assert_eq!(frames[3].blobs[0], frames[4].blobs[0]);
+        // A page the document does not have is left out, and said.
+        assert!(has(&frames[5].blobs[0], "/XYZ null 841.92 0.625]"));
+        assert_eq!(frames[5].header["diagnostics"][0]["code"], "pdf.view-ignored");
+        assert_eq!(frames[6].header["message"], "unknown page mode `bookmarks`");
+        assert_eq!(frames[7].header["message"], "unknown page layout `two`");
+        assert_eq!(frames[8].header["message"], "invalid zoom `0`");
+        assert_eq!(frames[9].header["message"], "invalid zoom `wide`");
+    }
+
+    #[test]
     fn encrypts_with_passwords_and_permissions() {
         let mut input = Vec::new();
         for (id, encryption) in [

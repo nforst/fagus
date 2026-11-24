@@ -55,6 +55,8 @@ struct Request {
     #[serde(default)]
     encryption: Option<Encryption>,
     #[serde(default)]
+    view: Option<View>,
+    #[serde(default)]
     signature: Option<SignatureRequest>,
     /// The memory budget in bytes (0 for none), if not the worker's.
     #[serde(default)]
@@ -166,6 +168,40 @@ struct Encryption {
     /// Every permission if left out.
     #[serde(default)]
     permissions: Option<Vec<String>>,
+}
+
+/// How a viewer shows the PDF when it opens it.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct View {
+    #[serde(default)]
+    page_mode: Option<String>,
+    #[serde(default)]
+    page_layout: Option<String>,
+    /// `fit-page`, `fit-width` or a number of percent.
+    #[serde(default)]
+    zoom: Option<Value>,
+    /// The page to open at, from 1.
+    #[serde(default)]
+    page: Option<usize>,
+    #[serde(default)]
+    fit_window: bool,
+    #[serde(default)]
+    center_window: bool,
+}
+
+/// The zoom named `fit-page` or `fit-width`, or of a number of percent above 0, as the command
+/// line and the worker protocol give it.
+pub(crate) fn zoom(text: &str) -> Option<fagus::Zoom> {
+    match text {
+        "fit-page" => Some(fagus::Zoom::FitPage),
+        "fit-width" => Some(fagus::Zoom::FitWidth),
+        _ => text
+            .parse::<f32>()
+            .ok()
+            .filter(|percent| percent.is_finite() && *percent > 0.0)
+            .map(fagus::Zoom::Percent),
+    }
 }
 
 #[derive(Serialize)]
@@ -456,6 +492,32 @@ fn document(
             protection = protection.permissions(permissions);
         }
         document = document.encrypt(protection);
+    }
+    if let Some(view) = request.view {
+        let mut initial = fagus::InitialView::new()
+            .fit_window(view.fit_window)
+            .center_window(view.center_window);
+        if let Some(name) = view.page_mode {
+            initial = initial.page_mode(
+                fagus::PageMode::from_name(&name).ok_or_else(|| format!("unknown page mode `{name}`"))?,
+            );
+        }
+        if let Some(name) = view.page_layout {
+            initial = initial.page_layout(
+                fagus::PageLayout::from_name(&name).ok_or_else(|| format!("unknown page layout `{name}`"))?,
+            );
+        }
+        if let Some(value) = view.zoom {
+            let text = match &value {
+                Value::String(name) => name.clone(),
+                other => other.to_string(),
+            };
+            initial = initial.zoom(zoom(&text).ok_or_else(|| format!("invalid zoom `{text}`"))?);
+        }
+        if let Some(page) = view.page {
+            initial = initial.page(page);
+        }
+        document = document.initial_view(initial);
     }
     if let Some(request_signature) = request.signature {
         document = document.sign(signature(caller, request.id, request_signature, &mut take)?);

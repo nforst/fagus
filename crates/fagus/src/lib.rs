@@ -47,7 +47,10 @@ pub use fagus_pdf::sign::{
     Algorithm, Certification, Placement, Revocation, RevocationRequest, Signature, Signer, Timestamper,
     timestamp_request,
 };
-pub use fagus_pdf::{Attachment, Conformance, Date, Encryption, PdfError, Permission, Relationship};
+pub use fagus_pdf::{
+    Attachment, Conformance, Date, Encryption, InitialView, PageLayout, PageMode, PdfError, Permission,
+    Relationship, Zoom,
+};
 pub use fagus_text::FontError;
 pub use layout_info::{Layout, LayoutBox, LayoutElement, LayoutPage, LayoutRow, RowSection};
 pub use limits::Limits;
@@ -128,6 +131,8 @@ pub struct Document {
     /// Whether to report where the elements ended up (see [`Document::report_layout`]).
     report_layout: bool,
     encryption: Option<Encryption>,
+    /// How a viewer shows the PDF when it opens it, if the document says.
+    initial_view: Option<InitialView>,
     /// The digital signature of the PDF, if any.
     signature: Option<Signature>,
     /// How deep the document lies in SVG images with HTML in them (see [`svg_document`]): 0
@@ -252,6 +257,7 @@ impl Document {
             created: None,
             report_layout: false,
             encryption: None,
+            initial_view: None,
             signature: None,
             svg_depth: 0,
             nesting: frames::Nesting::default(),
@@ -360,6 +366,29 @@ impl Document {
     #[must_use]
     pub fn encrypt(mut self, encryption: Encryption) -> Self {
         self.encryption = Some(encryption);
+        self
+    }
+
+    /// How a viewer shows the PDF when it opens it: the panel beside the pages, the layout of
+    /// the pages, the zoom, the page to open at, and what the window does. Viewers follow it to
+    /// different degrees. PDF/A-1b is PDF 1.4, which lacks the page modes
+    /// [`PageMode::Attachments`] and [`PageMode::Layers`] and the page layouts
+    /// [`PageLayout::TwoPageLeft`] and [`PageLayout::TwoPageRight`]: those, and a page the
+    /// document does not have, are left out with a `pdf.view-ignored` warning.
+    ///
+    /// ```
+    /// use fagus::{Document, InitialView, PageLayout, PageMode, Zoom};
+    ///
+    /// let document = Document::html("<h1>Handbuch</h1>").initial_view(
+    ///     InitialView::new()
+    ///         .page_mode(PageMode::Outlines)
+    ///         .page_layout(PageLayout::OneColumn)
+    ///         .zoom(Zoom::FitWidth),
+    /// );
+    /// ```
+    #[must_use]
+    pub fn initial_view(mut self, view: InitialView) -> Self {
+        self.initial_view = Some(view);
         self
     }
 
@@ -1371,6 +1400,15 @@ impl Inner {
                 diagnostics,
             });
         }
+        let view = input.initial_view.as_ref().map(|view| {
+            let (view, problems) = view.checked(conformance, page_count);
+            diagnostics.extend(
+                problems
+                    .into_iter()
+                    .map(|problem| pdf_warning("pdf.view-ignored", problem)),
+            );
+            view
+        });
         let options = fagus_pdf::Options {
             conformance,
             attachments: input.attachments.clone(),
@@ -1385,6 +1423,7 @@ impl Inner {
             encryption: input.encryption.clone(),
             fields,
             image_quality: input.image_quality,
+            view,
         };
         let written = match fagus_pdf::write(lists, &fonts, &metadata, &options) {
             Ok(written) => written,
@@ -4201,6 +4240,165 @@ mod tests {
             .pdf;
         assert!(contains(&pdf, "/Lang(en)"));
         assert!(!contains(&pdf, "/DisplayDocTitle"));
+    }
+
+    #[test]
+    fn writes_how_the_pdf_opens() {
+        let html = "<html lang=de><title>Handbuch</title><h1>Eins</h1>\
+                    <h1 style=\"break-before: page\">Zwei</h1>";
+        let engine = engine();
+        let render = |document: Document| engine.render(&document.created(CREATED)).expect("rendered");
+        let plain = render(Document::html(html));
+        // A view that says nothing changes nothing.
+        assert_eq!(
+            render(Document::html(html).initial_view(InitialView::new())).pdf,
+            plain.pdf
+        );
+        assert!(!contains(&plain.pdf, "/PageMode") && !contains(&plain.pdf, "/OpenAction"));
+
+        let view = InitialView::new()
+            .page_mode(PageMode::Outlines)
+            .page_layout(PageLayout::TwoPageRight)
+            .zoom(Zoom::Percent(150.0))
+            .page(2)
+            .fit_window(true)
+            .center_window(true);
+        let output = render(Document::html(html).initial_view(view.clone()));
+        assert!(output.diagnostics.is_empty(), "{:?}", output.diagnostics);
+        let pdf = &output.pdf;
+        for entry in [
+            "/ViewerPreferences<</DisplayDocTitle true/FitWindow true/CenterWindow true>>",
+            "/PageMode/UseOutlines",
+            "/PageLayout/TwoPageRight",
+        ] {
+            assert!(contains(pdf, entry), "{entry}");
+        }
+        // The destination is the top of the second page (A4), at one and a half times its size.
+        let text = String::from_utf8_lossy(&decoded(pdf)).into_owned();
+        let action = text.split("/OpenAction[").nth(1).expect("an open action");
+        let action = &action[..action.find(']').expect("an array")];
+        let (page, zoom) = action.split_once(" 0 R").expect("a page");
+        assert_eq!(zoom, "/XYZ null 841.92 1.5");
+        let kids = text.split("/Kids").nth(1).expect("pages");
+        let kids: Vec<&str> = kids[..kids.find(']').expect("an array")]
+            .trim_start_matches([' ', '['])
+            .split(" 0 R")
+            .map(str::trim)
+            .collect();
+        assert_eq!(kids[1], page, "{kids:?}");
+
+        // Without a title, the preferences hold only what the view says; the zoom alone opens
+        // at the first page.
+        let untitled = "<p>Eins<p style=\"break-before: page\">Zwei";
+        for (zoom, destination) in [
+            (Zoom::FitPage, "/Fit]"),
+            (Zoom::FitWidth, "/FitH 841.92]"),
+            (Zoom::Percent(100.0), "/XYZ null 841.92 1]"),
+        ] {
+            let pdf =
+                render(Document::html(untitled).initial_view(InitialView::new().zoom(zoom).fit_window(true)))
+                    .pdf;
+            assert!(contains(&pdf, "/ViewerPreferences<</FitWindow true>>"));
+            assert!(contains(&pdf, destination), "{destination}");
+        }
+        let pdf = render(Document::html(untitled).initial_view(InitialView::new().page(2))).pdf;
+        assert!(contains(&pdf, "/XYZ null 841.92 null]"));
+        assert!(!contains(&pdf, "/ViewerPreferences"));
+
+        // PDF/UA: krilla writes the preferences, and the view joins them.
+        let accessible = render(Document::html(html).accessible().initial_view(view.clone())).pdf;
+        let text = String::from_utf8_lossy(&decoded(&accessible)).into_owned();
+        assert_eq!(text.matches("/ViewerPreferences").count(), 1);
+        let preferences = text.split("/ViewerPreferences").nth(1).expect("preferences");
+        let preferences = &preferences[..preferences.find(">>").expect("a dictionary")];
+        for entry in ["/DisplayDocTitle true", "/FitWindow true", "/CenterWindow true"] {
+            assert!(preferences.contains(entry), "{entry} in {preferences}");
+        }
+        assert!(contains(&accessible, "/PageMode/UseOutlines"));
+        assert!(contains(&accessible, "/XYZ null 841.92 1.5]"));
+    }
+
+    #[test]
+    fn leaves_out_what_the_initial_view_cannot_have() {
+        let html = "<html lang=de><title>Handbuch</title><h1>Eins</h1>";
+        let engine = engine();
+        let render = |document: Document| engine.render(&document.created(CREATED)).expect("rendered");
+        let messages = |output: &Output| -> Vec<String> {
+            assert!(codes(output).iter().all(|code| *code == "pdf.view-ignored"));
+            output
+                .diagnostics
+                .iter()
+                .map(|diagnostic| diagnostic.message.clone())
+                .collect()
+        };
+        // PDF/A-1b is PDF 1.4, with a cross-reference table.
+        let view = InitialView::new()
+            .page_mode(PageMode::Attachments)
+            .page_layout(PageLayout::TwoPageLeft)
+            .zoom(Zoom::FitWidth)
+            .center_window(true);
+        let output = render(
+            Document::html(html)
+                .conformance(Conformance::PdfA1b)
+                .initial_view(view.clone()),
+        );
+        assert_eq!(
+            messages(&output),
+            [
+                "PDF/A-1b is PDF 1.4, which does not have the page mode `attachments`; it is left out",
+                "PDF/A-1b is PDF 1.4, which does not have the page layout `two-page-left`; it is left out",
+            ]
+        );
+        let pdf = &output.pdf;
+        assert!(!contains(pdf, "/PageMode") && !contains(pdf, "/PageLayout"));
+        assert!(contains(
+            pdf,
+            "/ViewerPreferences<</DisplayDocTitle true/CenterWindow true>>"
+        ));
+        assert!(contains(pdf, "/FitH 841.92]"));
+        assert!(contains(pdf, "\nxref\n0 "));
+        // What PDF 1.4 has stays, also for the other levels.
+        let old = InitialView::new()
+            .page_mode(PageMode::FullScreen)
+            .page_layout(PageLayout::TwoColumnRight);
+        let output = render(
+            Document::html(html)
+                .conformance(Conformance::PdfA1b)
+                .initial_view(old),
+        );
+        assert!(output.diagnostics.is_empty(), "{:?}", output.diagnostics);
+        assert!(contains(&output.pdf, "/PageMode/FullScreen"));
+        assert!(contains(&output.pdf, "/PageLayout/TwoColumnRight"));
+        let output = render(
+            Document::html(html)
+                .conformance(Conformance::PdfA3b)
+                .initial_view(view),
+        );
+        assert!(output.diagnostics.is_empty(), "{:?}", output.diagnostics);
+        assert!(contains(&output.pdf, "/PageMode/UseAttachments"));
+        assert!(contains(&output.pdf, "/PageLayout/TwoPageLeft"));
+
+        // A page the document does not have, and a zoom that is none.
+        for page in [0, 2] {
+            let output = render(
+                Document::html(html)
+                    .initial_view(InitialView::new().page(page).page_mode(PageMode::Thumbnails)),
+            );
+            assert_eq!(
+                messages(&output),
+                [format!(
+                    "the page to open at ({page}) is not a page of the document, which has 1; it is left out"
+                )]
+            );
+            assert!(!contains(&output.pdf, "/OpenAction"));
+            assert!(contains(&output.pdf, "/PageMode/UseThumbs"));
+        }
+        let output = render(Document::html(html).initial_view(InitialView::new().zoom(Zoom::Percent(0.0))));
+        assert_eq!(
+            messages(&output),
+            ["a zoom of 0 percent is not possible; it is left out"]
+        );
+        assert!(!contains(&output.pdf, "/OpenAction"));
     }
 
     #[test]

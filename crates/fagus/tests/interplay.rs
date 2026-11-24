@@ -5,7 +5,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use fagus::{Date, Document, Encryption, Engine, Signature};
+use fagus::{Date, Document, Encryption, Engine, InitialView, PageLayout, PageMode, Signature, Zoom};
 
 const CREATED: Date = Date::new(2026, 11, 19, 12, 0, 0);
 
@@ -416,4 +416,78 @@ fn says_why_a_signature_cannot_be_visible() {
     );
     assert!(render(signature().visible_on("hidden")).contains("has no box to show it in"));
     assert!(render(signature().visible_at(2, 0.0, 0.0, 10.0, 10.0)).contains("(page 2 of 1)"));
+}
+
+/// The catalog of a PDF as qpdf reads it, as JSON.
+fn catalog(file: &Path, password: &str) -> String {
+    let output = Command::new("qpdf")
+        .arg(format!("--password={password}"))
+        .args(["--json", "--json-key=qpdf", "--json-object=trailer"])
+        .arg(file)
+        .output()
+        .expect("qpdf runs");
+    let json = String::from_utf8_lossy(&output.stdout).into_owned();
+    let root = json.split("\"/Root\": \"").nth(1).expect("a catalog");
+    let root = &root[..root.find('"').expect("a reference")];
+    let output = Command::new("qpdf")
+        .arg(format!("--password={password}"))
+        .args(["--json", "--json-key=qpdf"])
+        .arg(format!(
+            "--json-object={}",
+            root.trim_end_matches(" R").replace(' ', ",")
+        ))
+        .arg(file)
+        .output()
+        .expect("qpdf runs");
+    String::from_utf8_lossy(&output.stdout)
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+#[test]
+fn opens_encrypted_and_signed_pdfs_as_told() {
+    let view = InitialView::new()
+        .page_mode(PageMode::Outlines)
+        .page_layout(PageLayout::OneColumn)
+        .zoom(Zoom::FitWidth)
+        .fit_window(true);
+    let seeded = Encryption::new()
+        .user_password("user")
+        .owner_password("owner")
+        .seed([7; 32]);
+    for (name, encryption, signed, password) in [
+        ("view-encrypted", Some(seeded.clone()), false, "user"),
+        ("view-signed", None, true, ""),
+        ("view-encrypted-signed", Some(seeded), true, "user"),
+    ] {
+        let mut document = Document::html(SIGNED_LETTER)
+            .created(CREATED)
+            .initial_view(view.clone());
+        if let Some(encryption) = encryption {
+            document = document.encrypt(encryption);
+        }
+        if signed {
+            document = document.sign(signature());
+        }
+        let output = engine().render(&document).expect("rendered");
+        assert!(output.diagnostics.is_empty(), "{:?}", output.diagnostics);
+        if !installed("qpdf") {
+            continue;
+        }
+        let file = file(name, &output.pdf);
+        let (status, text) = qpdf(&[&format!("--password={password}"), "--check"], &file);
+        assert_eq!(status, 0, "{name}: {text}");
+        let catalog = catalog(&file, password);
+        for entry in [
+            "\"/PageMode\": \"/UseOutlines\"",
+            "\"/PageLayout\": \"/OneColumn\"",
+            "\"/DisplayDocTitle\": true",
+            "\"/FitWindow\": true",
+            "\"/FitH\", 841.92 ]",
+        ] {
+            assert!(catalog.contains(entry), "{name}: {entry} in {catalog}");
+        }
+        std::fs::remove_file(file).expect("removed");
+    }
 }
