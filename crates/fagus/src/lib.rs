@@ -111,6 +111,9 @@ pub struct Document {
     accessible: bool,
     /// Whether form controls become the fields of an interactive form.
     forms: bool,
+    /// The quality of the JPEGs that opaque images are written as (see
+    /// [`Document::image_quality`]).
+    image_quality: Option<u8>,
     attachments: Vec<Attachment>,
     factur_x: Option<FacturXProfile>,
     /// The profile the invoice XML declares, if any.
@@ -239,6 +242,7 @@ impl Document {
             tagged: true,
             accessible: false,
             forms: false,
+            image_quality: None,
             attachments: Vec::new(),
             factur_x: None,
             declared_profile: None,
@@ -316,6 +320,24 @@ impl Document {
     #[must_use]
     pub fn accessible(mut self) -> Self {
         self.accessible = true;
+        self
+    }
+
+    /// Writes images as JPEGs of this quality, from 1 (the smallest files) to 100 (the best
+    /// pictures), which makes a PDF with photos much smaller; 80 suits screens and office
+    /// printers. Without it, the pixels of images are compressed without loss.
+    ///
+    /// Only raster images whose pixels are all opaque become a JPEG. Images with transparent
+    /// pixels stay as they are, as do images of formats without loss (PNG, GIF, lossless WebP,
+    /// BMP, TIFF) whose JPEG would be no smaller than their file: logos, charts and QR codes.
+    /// JPEG images are embedded as they are, never compressed again, and SVG images stay
+    /// vectors. Below a quality of 90 the color of a JPEG has half the resolution of its
+    /// brightness (4:2:0), from 90 the full one.
+    ///
+    /// A quality of 0 or above 100 fails the render with [`PdfError::ImageQuality`].
+    #[must_use]
+    pub fn image_quality(mut self, quality: u8) -> Self {
+        self.image_quality = Some(quality);
         self
     }
 
@@ -902,6 +924,11 @@ impl Inner {
         if let Some(error) = input.encryption_problem() {
             return Err(Error::Pdf(error).into());
         }
+        if let Some(quality) = input.image_quality
+            && !(1..=100).contains(&quality)
+        {
+            return Err(Error::Pdf(PdfError::ImageQuality(quality)).into());
+        }
         if let Some(problems) = input.factur_x_problem() {
             return Err(Error::Pdf(PdfError::Conformance {
                 standard: "Factur-X".to_owned(),
@@ -1357,7 +1384,7 @@ impl Inner {
             images: self.images.clone(),
             encryption: input.encryption.clone(),
             fields,
-            image_quality: None,
+            image_quality: input.image_quality,
         };
         let written = match fagus_pdf::write(lists, &fonts, &metadata, &options) {
             Ok(written) => written,
