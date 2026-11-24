@@ -42,6 +42,7 @@ All notable changes to this project are documented in this file. The format is b
 - Text at an absurd font size (`font-size: 1e30px`) no longer overflows the arithmetic of its glyphs' advances: the advances were arbitrary, and a build with overflow checks ended with an internal error.
 - A font size is at most 10,000 pixels, with `zoom`, as in Chrome; `em` and inherited sizes follow the size cut to that. A larger size was used as it was: `zoom` times a large `font-size` could be infinite, and text was then placed at positions that are no numbers.
 - The zoom of an element with those of its ancestors stays between a millionth and a million, as in Chrome. Lengths times a larger `zoom` could be infinite.
+- `letter-spacing` and `word-spacing` are at most the longest length a layout holds (16,777,216 pixels). With a spacing near the largest number or an infinite one (`calc(infinity * 1px)`), text was laid out with a negative width.
 - A document whose root element has `display: none` has one empty page, with its margin boxes, as Chrome prints it. Fagus wrote a PDF without pages, which readers do not open, and reported 0 pages.
 
 ## [1.1.0] - 2026-11-20

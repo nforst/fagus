@@ -114,6 +114,30 @@ fn keeps_the_zoom_within_the_range_of_chrome() {
 }
 
 #[test]
+fn spaces_letters_and_words_by_lengths_layout_holds() {
+    // Found by the layout invariants: with a `letter-spacing` near the largest number or
+    // infinite, the advances of glyphs were infinite or no numbers and their text was laid out
+    // with a negative width. Such spacing is the longest length of layout.
+    let width = |spacing: &str| {
+        let html = format!("<span id=text style='{spacing}'>abc def</span>");
+        let output = Engine::new()
+            .render(&Document::html(html).report_layout(true))
+            .expect("rendered");
+        output.layout.expect("layout").elements[0].boxes[0].width
+    };
+    for spacing in [
+        "letter-spacing: 3e38px",
+        "letter-spacing: calc(infinity * 1px)",
+        "letter-spacing: 3e38px; word-spacing: 3e38px",
+    ] {
+        assert!(width(spacing) > 1.0e6, "{spacing}: {}", width(spacing));
+    }
+    // The words are on lines of their own.
+    assert!(width("word-spacing: 3e38px") > 0.0);
+    renders("<p style='letter-spacing: -3e38px; word-spacing: calc(-infinity * 1px)'>abc def</p>");
+}
+
+#[test]
 fn renders_clip_shapes_too_large_to_draw() {
     // The clip was left out but its end was not, which krilla could not pop.
     renders("<div style='clip-path: circle(1e30px)'>x</div>");

@@ -3024,6 +3024,10 @@ fn may_set_content(rules: &[fagus_css::MatchedRule<'_>]) -> bool {
 /// The largest font size, in pixels, as in Chrome: a larger one is cut to it.
 const MAX_FONT_SIZE: f32 = 10_000.0;
 
+/// The largest `letter-spacing` and `word-spacing`, in pixels: the longest length of layout (its
+/// lengths are whole 1/64 pixel in 32 bits, halved).
+const MAX_SPACING: f32 = 16_777_216.0;
+
 /// The smallest and the largest zoom of an element with those of its ancestors, as in Chrome.
 const MIN_ZOOM: f32 = 1.0e-6;
 const MAX_ZOOM: f32 = 1.0e6;
@@ -3163,6 +3167,15 @@ fn finish(style: &mut ComputedValues, is_root: bool) {
     }
     if let Some((pixels, fraction)) = style.spacing_percentages[1] {
         style.word_spacing = pixels + fraction * style.font_size;
+    }
+    // Spacing past the longest length that layout holds is that length (what is no number is
+    // none): the advances of glyphs, which it is added to, stay numbers that add up.
+    for spacing in [&mut style.letter_spacing, &mut style.word_spacing] {
+        *spacing = if spacing.is_nan() {
+            0.0
+        } else {
+            spacing.clamp(-MAX_SPACING, MAX_SPACING)
+        };
     }
     // `-webkit-line-clamp` on a vertical `-webkit-box` (which computes as flex) clamps a block
     // container, as in Chrome.
