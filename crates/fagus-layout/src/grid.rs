@@ -1005,6 +1005,21 @@ impl Layouter<'_> {
         } else {
             (0..rows).map(|index| row_track(index).flexible()).collect()
         };
+        // Whether an item in a row alone makes it grow where its breaks take room from it, as
+        // in Chrome (Blink's `MinBlockSizeShouldEncompassIntrinsicSize` for grid items): not in a
+        // row of fixed sizes, nor in one of a fixed minimum in a grid whose height is not `auto`.
+        // Its content then reaches out of it.
+        let growing_rows: Vec<bool> = if inherited_rows.is_some() {
+            Vec::new()
+        } else {
+            (0..rows)
+                .map(|index| {
+                    let track = row_track(index);
+                    track.intrinsic_min()
+                        || !matches!(track.max, Maximum::Fixed(_)) && matches!(style.height, Size::Auto)
+                })
+                .collect()
+        };
         let mut contributions: Vec<Contribution> = Vec::with_capacity(laid.len());
         for laid in &laid {
             let reported = self
@@ -1355,7 +1370,8 @@ impl Layouter<'_> {
                 width: width_override,
                 containing_height: Some(area.1),
                 stretched,
-                grows: item.rows.1 - item.rows.0 == 1,
+                grows: item.rows.1 - item.rows.0 == 1
+                    && growing_rows.get(item.rows.0).is_none_or(|grows| *grows),
                 margins,
             });
         }

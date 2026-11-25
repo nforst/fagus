@@ -582,3 +582,207 @@ fn keeps_the_content_of_stretched_flex_items_past_their_second_page() {
     assert_eq!(span_of(&document, &pages, 3, "b"), Some((0.0, 180.0)));
     assert_eq!(top_of(&document, &pages, "after"), Some((2, 200.0)));
 }
+
+#[test]
+fn ends_grid_items_in_rows_of_fixed_sizes_above_their_overflow() {
+    // The item over two rows of 50px is 100px tall, and the grid with it: its content of 900px
+    // overflows both down four pages, beside what follows the grid, as in Chrome. (The item
+    // went on down the pages and ended with a negative height.)
+    let (document, pages) = before_after(
+        "<div style='display: grid; grid-template-rows: 50px 50px'><div class=i style='grid-row: 1 / 3'>
+         <div class=c style='height: 900px'></div></div></div>",
+    );
+    assert_eq!(pages.len(), 4);
+    assert_eq!(span_of(&document, &pages, 0, "i"), Some((0.0, 100.0)));
+    assert_eq!(span_of(&document, &pages, 1, "i"), Some((0.0, 0.0)));
+    assert_eq!(span_of(&document, &pages, 3, "i"), Some((0.0, 0.0)));
+    assert_eq!(span_of(&document, &pages, 3, "c"), Some((0.0, 120.0)));
+    assert_eq!(top_of(&document, &pages, "after"), Some((0, 100.0)));
+    // So does an item in one row.
+    let (document, pages) = before_after(
+        "<div style='display: grid; grid-template-rows: 50px 50px'><div class=i>
+         <div class=c style='height: 900px'></div></div></div>",
+    );
+    assert_eq!(pages.len(), 4);
+    assert_eq!(span_of(&document, &pages, 0, "i"), Some((0.0, 50.0)));
+    assert_eq!(top_of(&document, &pages, "after"), Some((0, 100.0)));
+    // And one over flexible rows that share a fixed height.
+    let (document, pages) = before_after(
+        "<div style='display: grid; grid-template-rows: 1fr 1fr 1fr; height: 150px'>
+         <div class=i style='grid-row: 1 / 4'><div class=c style='height: 900px'></div></div></div>",
+    );
+    assert_eq!(pages.len(), 4);
+    assert_eq!(span_of(&document, &pages, 0, "i"), Some((0.0, 150.0)));
+    assert_eq!(top_of(&document, &pages, "after"), Some((0, 150.0)));
+    // Rows taller than the page break, and the item ends with them on the second page.
+    let (document, pages) = before_after(
+        "<div style='display: grid; grid-template-rows: 200px 200px'><div class=i style='grid-row: 1 / 3'>
+         <div class=c style='height: 900px'></div></div></div>",
+    );
+    assert_eq!(pages.len(), 4);
+    assert_eq!(span_of(&document, &pages, 0, "i"), Some((0.0, 260.0)));
+    assert_eq!(span_of(&document, &pages, 1, "i"), Some((0.0, 140.0)));
+    assert_eq!(span_of(&document, &pages, 2, "i"), Some((0.0, 0.0)));
+    assert_eq!(top_of(&document, &pages, "after"), Some((1, 140.0)));
+    // An item that avoids breaks inside it moves to the next page with its rows and keeps
+    // their height there.
+    let (document, pages) = before_after(
+        "<div style='height: 200px'></div><div style='display: grid; grid-template-rows: 50px 50px'>
+         <div class=i style='grid-row: 1 / 3; break-inside: avoid'><div class=c style='height: 500px'></div>
+         </div></div>",
+    );
+    assert_eq!(pages.len(), 3);
+    assert_eq!(span_of(&document, &pages, 1, "i"), Some((0.0, 100.0)));
+    assert_eq!(span_of(&document, &pages, 2, "c"), Some((0.0, 240.0)));
+    assert_eq!(top_of(&document, &pages, "after"), Some((1, 100.0)));
+    // A grid whose rows fit on the page, but not its bottom padding below them, stays there
+    // with that content, and its padding goes on alone.
+    let (document, pages) = before_after(
+        "<div style='height: 140px'></div>
+         <div class=g style='display: grid; grid-template-rows: 50px 50px; padding-bottom: 30px'>
+         <div class=i style='grid-row: 1 / 3'><div class=c style='height: 500px'></div></div></div>",
+    );
+    assert_eq!(pages.len(), 3);
+    assert_eq!(span_of(&document, &pages, 0, "i"), Some((140.0, 240.0)));
+    assert_eq!(span_of(&document, &pages, 1, "g"), Some((0.0, 30.0)));
+    assert_eq!(span_of(&document, &pages, 2, "c"), Some((0.0, 120.0)));
+    assert_eq!(top_of(&document, &pages, "after"), Some((1, 30.0)));
+}
+
+#[test]
+fn grows_grid_rows_only_where_their_sizes_follow_their_content() {
+    // The end of the item on its last page, and where the box after the grid is.
+    let ends = |grid: &str, item: &str| {
+        let (document, pages) = before_after(&format!(
+            "<div style='display: grid; {grid}'><div class=i style='{item}'>{BOXES}</div></div>"
+        ));
+        assert_eq!(pages.len(), 4);
+        let last = if span_of(&document, &pages, 3, "i") == Some((0.0, 0.0)) {
+            2
+        } else {
+            3
+        };
+        (
+            last,
+            span_of(&document, &pages, last, "i").map(|(_, end)| end),
+            top_of(&document, &pages, "after"),
+        )
+    };
+    // The breaks take 240px of the item's 720px. In a row of an automatic size, the item
+    // grows by them and ends below its fourth box, as in Chrome
+    // (`MinBlockSizeShouldEncompassIntrinsicSize`).
+    assert_eq!(ends("", ""), (3, Some(180.0), Some((3, 180.0))));
+    assert_eq!(
+        ends("grid-template-rows: minmax(100px, auto)", ""),
+        (3, Some(180.0), Some((3, 180.0)))
+    );
+    // So it does in a flexible row, past the end of the grid of a fixed height.
+    let (last, end, _) = ends("grid-template-rows: 1fr; height: 720px", "");
+    assert_eq!((last, end), (3, Some(180.0)));
+    // In a row of a fixed size it ends 720px down, on the third page, and the fourth box
+    // overflows it, as it does in a row of a fixed minimum in a grid of a fixed height, and
+    // over several rows, whatever their sizes.
+    assert_eq!(
+        ends("grid-template-rows: 720px", ""),
+        (2, Some(200.0), Some((2, 200.0)))
+    );
+    assert_eq!(
+        ends("grid-template-rows: minmax(100px, auto); height: 720px", ""),
+        (2, Some(200.0), Some((2, 200.0)))
+    );
+    assert_eq!(
+        ends("grid-template-rows: auto auto", "grid-row: 1 / 3"),
+        (2, Some(200.0), Some((2, 200.0)))
+    );
+}
+
+#[test]
+fn goes_on_with_the_overflow_of_grid_items_beside_the_rows_after_them() {
+    // Both rows are on the first page, with the item over them, the one in the first and the
+    // one in the second; the content of the first two overflows them on the pages after, and
+    // moves nothing, as in Chrome.
+    let (document, pages) = before_after(
+        "<div style='display: grid; grid-template-rows: 50px 50px; grid-template-columns: 1fr 1fr'>
+         <div class=i style='grid-row: 1 / 3'><div class=c style='height: 900px'></div></div>
+         <div class=j><div class=d style='height: 400px'></div></div><div class=k></div></div>",
+    );
+    assert_eq!(pages.len(), 4);
+    assert_eq!(span_of(&document, &pages, 0, "i"), Some((0.0, 100.0)));
+    assert_eq!(span_of(&document, &pages, 0, "j"), Some((0.0, 50.0)));
+    assert_eq!(span_of(&document, &pages, 0, "k"), Some((50.0, 100.0)));
+    assert_eq!(span_of(&document, &pages, 0, "d"), Some((0.0, 260.0)));
+    assert_eq!(span_of(&document, &pages, 1, "d"), Some((0.0, 140.0)));
+    assert_eq!(span_of(&document, &pages, 3, "c"), Some((0.0, 120.0)));
+    assert_eq!(top_of(&document, &pages, "after"), Some((0, 100.0)));
+    // The first row of 300px ends 40px down the second page, where the second row follows it
+    // beside the content that overflows the first.
+    let (document, pages) = before_after(
+        "<div style='display: grid; grid-template-rows: 300px 40px'>
+         <div class=i><div class=c style='height: 700px'></div></div><div class=j></div></div>",
+    );
+    assert_eq!(pages.len(), 3);
+    assert_eq!(span_of(&document, &pages, 1, "i"), Some((0.0, 40.0)));
+    assert_eq!(span_of(&document, &pages, 1, "j"), Some((40.0, 80.0)));
+    assert_eq!(span_of(&document, &pages, 1, "c"), Some((0.0, 260.0)));
+    assert_eq!(span_of(&document, &pages, 2, "c"), Some((0.0, 180.0)));
+    assert_eq!(top_of(&document, &pages, "after"), Some((1, 80.0)));
+    // The second row breaks, and goes on at the top of the second page beside that content.
+    let (document, pages) = before_after(
+        "<div style='display: grid; grid-template-rows: 50px 300px; gap: 10px'>
+         <div class=i><div class=c style='height: 900px'></div></div>
+         <div class=j><div class=d style='height: 280px'></div></div></div>",
+    );
+    assert_eq!(pages.len(), 4);
+    assert_eq!(span_of(&document, &pages, 0, "i"), Some((0.0, 50.0)));
+    assert_eq!(span_of(&document, &pages, 0, "j"), Some((60.0, 260.0)));
+    assert_eq!(span_of(&document, &pages, 1, "j"), Some((0.0, 100.0)));
+    assert_eq!(span_of(&document, &pages, 1, "d"), Some((0.0, 80.0)));
+    assert_eq!(span_of(&document, &pages, 1, "c"), Some((0.0, 260.0)));
+    assert_eq!(span_of(&document, &pages, 3, "c"), Some((0.0, 120.0)));
+    assert_eq!(top_of(&document, &pages, "after"), Some((1, 100.0)));
+    // An item as tall as its content, which its row of 50px does not grow for, goes on past
+    // the grid too.
+    let (document, pages) = before_after(
+        "<div style='display: grid; grid-template-rows: 50px 50px'><div class=i style='align-self: start'>
+         <div class=c style='height: 500px'></div></div><div class=j></div></div>",
+    );
+    assert_eq!(pages.len(), 2);
+    assert_eq!(span_of(&document, &pages, 0, "i"), Some((0.0, 260.0)));
+    assert_eq!(span_of(&document, &pages, 0, "j"), Some((50.0, 100.0)));
+    assert_eq!(span_of(&document, &pages, 1, "i"), Some((0.0, 240.0)));
+    assert_eq!(top_of(&document, &pages, "after"), Some((0, 100.0)));
+}
+
+#[test]
+fn ends_flex_lines_above_the_overflow_of_items_that_end_on_the_page() {
+    // The item of 100px ends on the first page, and the line with it: the item beside it is
+    // stretched to 100px, and the content that overflows the first goes on beside what follows
+    // the container, as in Chrome. (The line went on down the pages with that content.)
+    let (document, pages) = before_after(
+        "<div style='display: flex'><div class=i style='height: 100px; width: 50%'>
+         <div class=c style='height: 500px'></div></div><div class=j style='width: 50%'></div></div>",
+    );
+    assert_eq!(pages.len(), 2);
+    assert_eq!(span_of(&document, &pages, 0, "i"), Some((0.0, 100.0)));
+    assert_eq!(span_of(&document, &pages, 0, "j"), Some((0.0, 100.0)));
+    assert_eq!(span_of(&document, &pages, 1, "c"), Some((0.0, 240.0)));
+    assert_eq!(top_of(&document, &pages, "after"), Some((0, 100.0)));
+    // The next line follows it on the page.
+    let (document, pages) = before_after(
+        "<div style='display: flex; flex-wrap: wrap'><div class=i style='height: 100px; width: 100%'>
+         <div class=c style='height: 500px'></div></div><div class=j style='width: 50%; height: 30px'></div></div>",
+    );
+    assert_eq!(pages.len(), 2);
+    assert_eq!(span_of(&document, &pages, 0, "j"), Some((100.0, 130.0)));
+    assert_eq!(top_of(&document, &pages, "after"), Some((0, 130.0)));
+    // So does a line end with a grid whose rows are of fixed sizes.
+    let (document, pages) = before_after(
+        "<div style='display: flex'><div style='display: grid; grid-template-rows: 50px 50px; width: 50%'>
+         <div class=i style='grid-row: 1 / 3'><div class=c style='height: 500px'></div></div></div>
+         <div class=j style='width: 50%'></div></div>",
+    );
+    assert_eq!(pages.len(), 2);
+    assert_eq!(span_of(&document, &pages, 0, "i"), Some((0.0, 100.0)));
+    assert_eq!(span_of(&document, &pages, 0, "j"), Some((0.0, 100.0)));
+    assert_eq!(top_of(&document, &pages, "after"), Some((0, 100.0)));
+}

@@ -73,12 +73,15 @@ pub enum BreakToken {
     /// at which the next page starts. `overflow` is how much taller than its content the
     /// container is on the next page: what the monolithic content of its items that go on
     /// reached past the end of the page before, beyond the rest of its rows (see
-    /// `grid_item_overflow`).
+    /// `grid_item_overflow`). `outlived` holds the lines that ended on a page before while items
+    /// of theirs go on past their end (see `parallel::Portion::outlived`), each with a token per
+    /// item: those items continue at the top of the page, beside what follows their lines.
     Container {
         line: usize,
         inside: Option<(Vec<Option<BreakToken>>, Au)>,
         consumed: Consumed,
         overflow: Au,
+        outlived: Vec<(usize, Vec<Option<BreakToken>>)>,
     },
     /// A column flex container with a fixed or minimum height continues each of its flex lines
     /// where `lines` tells (see [`crate::flex_column`]).
@@ -799,8 +802,8 @@ pub struct Layouter<'a> {
     /// children are `auto`, also where it is laid out again at its flexed height, as in Chrome
     /// (Blink's `is_initial_block_size_indefinite`).
     pub(crate) indefinite_basis: std::cell::Cell<bool>,
-    /// Whether the block container laid out next is a flex item that keeps the height the
-    /// container gives it where it breaks, as in Chrome (Blink's
+    /// Whether the block container laid out next is a flex or grid item that keeps the height
+    /// the container gives it where it breaks, as in Chrome (Blink's
     /// `MinBlockSizeShouldEncompassIntrinsicSize` is false for it): its content overflows it
     /// and goes on past its end, as that of a box of a fixed height does.
     pub(crate) fixed_item_height: std::cell::Cell<bool>,
@@ -3764,6 +3767,13 @@ impl<'a> Layouter<'a> {
         // The same, for the next page, and how far the container reaches past the end of this
         // one for it.
         let mut outgoing_overflow = (Au::ZERO, Au::ZERO);
+        // The lines that ended on a page before, outlived by items that go on here, and those
+        // that are for the next page.
+        let incoming_outlived: &[(usize, Vec<Option<BreakToken>>)] = match token {
+            Some(BreakToken::Container { outlived, .. }) => outlived,
+            _ => &[],
+        };
+        let mut outlived: Vec<(usize, Vec<Option<BreakToken>>)> = Vec::new();
         let (start, mut inside) = match token {
             Some(BreakToken::Container { line, inside, .. }) => (*line, inside.as_ref()),
             // The rest of a container taller than its content.
@@ -3833,6 +3843,44 @@ impl<'a> Layouter<'a> {
         // Where the items of a line that goes on at the top of the page end there, below the
         // next line, which starts beside them (see below).
         let mut beside_end = Au::ZERO;
+        // The items that outlived their lines go on at the top of the page, in parallel with
+        // the lines that follow, which they do not move, as in Chrome.
+        for (index, tokens) in incoming_outlived {
+            let Some(line) = lines.get(*index) else {
+                continue;
+            };
+            let Some(line_originals) = originals.get(line.items.clone()) else {
+                continue;
+            };
+            let mut boxes = LineItems {
+                layouter: self,
+                items: &line.boxes,
+                originals: line_originals,
+                flush: space.flush,
+                kept: false,
+                fixed_stretch,
+            };
+            let room = (content_limit - top).max(Au::EPSILON);
+            let mut rest = vec![None; tokens.len()];
+            for (item, token) in tokens.iter().enumerate() {
+                let Some(token) = token else {
+                    continue;
+                };
+                match crate::parallel::LineBoxes::lay(&mut boxes, item, Some(token), room, space.at_top) {
+                    Some((mut fragment, next)) => {
+                        fragment.rect.y = top;
+                        children.push(fragment);
+                        rest[item] = next;
+                    }
+                    // (An item that finds no room waits for a page that it starts.)
+                    None if !space.at_top => rest[item] = Some(token.clone()),
+                    None => {}
+                }
+            }
+            if rest.iter().any(Option::is_some) {
+                outlived.push((*index, rest));
+            }
+        }
         for (index, line) in lines.iter().enumerate().skip(start) {
             // The line of a flex container without items holds nothing: the container breaks as
             // an empty box of its height, as in Chrome.
@@ -3869,6 +3917,9 @@ impl<'a> Layouter<'a> {
                 )?;
                 let mut height = portion.height;
                 let mut broken = portion.next.clone();
+                if let Some(tokens) = portion.outlived.clone() {
+                    outlived.push((index, tokens));
+                }
                 // A last line that goes on only for the monolithic content of its items, which
                 // all end on the page, ends the container there (see below).
                 if index + 1 == lines.len()
@@ -4102,6 +4153,7 @@ impl<'a> Layouter<'a> {
                     }
                 }
                 children.truncate(cut.1);
+                outlived.retain(|(line, _)| *line < cut.0);
                 y = cut.2;
                 // A row gap that crosses the end of the page is left out, as Chrome leaves it
                 // out where it lies in the grid laid out whole: as much of it as the rows broken
@@ -4179,6 +4231,9 @@ impl<'a> Layouter<'a> {
             }
             history.push((index, children.len(), y));
             let mut broken = portion.next.clone();
+            if let Some(tokens) = portion.outlived.clone() {
+                outlived.push((index, tokens));
+            }
             if growth == crate::parallel::Growth::Grid
                 && let Some(inside) = &mut broken
             {
@@ -4210,6 +4265,9 @@ impl<'a> Layouter<'a> {
             && y <= limit
             && y + bottom_frame > limit
             && matches!(style.height, Size::Auto)
+            // (Not where the content of its items goes on past the container, which breaks
+            // all the same: its bottom border and padding then go on alone, as in Chrome.)
+            && outlived.is_empty()
             && let Some(&(line, count, before)) = history.last()
             && line > start
         {
@@ -4224,6 +4282,7 @@ impl<'a> Layouter<'a> {
             && y + bottom_frame > limit
             && matches!(style.height, Size::Auto)
             && history.last().is_some_and(|&(line, _, _)| line == start)
+            && outlived.is_empty()
         {
             // The container's only line on the page would leave its bottom border and padding
             // alone on the next one: the container moves there as a whole instead, as in Chrome
@@ -4238,6 +4297,7 @@ impl<'a> Layouter<'a> {
             inside,
             consumed: Consumed::default(),
             overflow: outgoing_overflow.0,
+            outlived: Vec::new(),
         });
         let mut broken = next_token.is_some();
         // The overflow of the items on the page before makes the container that much taller,
@@ -4276,6 +4336,7 @@ impl<'a> Layouter<'a> {
                     inside: None,
                     consumed: Consumed::default(),
                     overflow: Au::ZERO,
+                    outlived: Vec::new(),
                 }
             } else {
                 // A container taller than its content breaks at the end of the page.
@@ -4284,6 +4345,34 @@ impl<'a> Layouter<'a> {
                 BreakToken::Rest { rest }
             });
             broken = true;
+        }
+        // The items that outlive their lines go on with the container, or past its end where
+        // it ends on the page (see below). A container that goes on only with the rest of its
+        // height does so past its last line, which comes to the same.
+        let ends_outlived = next_token.is_none() && !outlived.is_empty();
+        if !outlived.is_empty() {
+            next_token = Some(match next_token.take() {
+                Some(BreakToken::Container {
+                    line,
+                    inside,
+                    consumed,
+                    overflow,
+                    ..
+                }) => BreakToken::Container {
+                    line,
+                    inside,
+                    consumed,
+                    overflow,
+                    outlived,
+                },
+                _ => BreakToken::Container {
+                    line: lines.len(),
+                    inside: None,
+                    consumed: Consumed::default(),
+                    overflow: Au::ZERO,
+                    outlived,
+                },
+            });
         }
         if let Some(token) = &mut next_token {
             token.set_consumed(earlier + height - top - if clones { bottom_frame } else { Au::ZERO });
@@ -4338,6 +4427,22 @@ impl<'a> Layouter<'a> {
                 });
                 height = top + own + bottom_frame;
                 broken = false;
+            }
+        }
+        // A container that ends on the page, outlived by items of its lines: they go on on the
+        // next pages without it, as the content that overflows a block container does.
+        if ends_outlived {
+            next_token = next_token.map(|inner| BreakToken::Overflow {
+                inner: Box::new(inner),
+            });
+            // (Stretched to `full`, it ends with what is left of that height.)
+            if let Some(full) = full
+                && !clones
+            {
+                let rest = if continuing { full - y0 - earlier } else { full };
+                if rest <= limit {
+                    height = height.max(rest);
+                }
             }
         }
         Some(Outcome {
@@ -7647,7 +7752,9 @@ pub(crate) struct LineItem {
     /// Whether it was stretched to the height of its line or area.
     pub(crate) stretched: bool,
     /// Whether its line grows where it needs more room after a break: not for a grid item
-    /// that spans several rows, as in Chrome.
+    /// that spans several rows or lies in a row of a fixed size, as in Chrome. Stretched, such
+    /// an item keeps the height of its area where it breaks (see
+    /// [`Layouter::fixed_item_height`]).
     pub(crate) grows: bool,
     /// Its top and bottom margins.
     pub(crate) margins: (Au, Au),
@@ -8317,11 +8424,13 @@ impl LineItems<'_, '_, '_> {
             .layouter
             .breaks_avoided_items
             .replace(kept_whole || self.layouter.breaks_avoided_items.get());
-        // An item whose children's heights are percentages of its own does not grow either, as
-        // in Chrome (`MinBlockSizeShouldEncompassIntrinsicSize`).
+        // A grid item whose rows do not grow for it keeps the height of its area, and an item
+        // whose children's heights are percentages of its own does not grow either, as in
+        // Chrome (`MinBlockSizeShouldEncompassIntrinsicSize`).
         self.layouter.fixed_item_height.set(
             height.is_some()
-                && (self.fixed_stretch && item.stretched || self.layouter.has_percentage_heights(item.id)),
+                && ((self.fixed_stretch || !item.grows) && item.stretched
+                    || self.layouter.has_percentage_heights(item.id)),
         );
         let outcome = self.layouter.item_part(
             item,

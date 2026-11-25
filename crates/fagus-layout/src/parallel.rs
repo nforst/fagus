@@ -29,8 +29,8 @@ pub(crate) struct Piece {
     /// Whether it draws its borders at the breaks too (`box-decoration-break: clone`).
     pub(crate) clones: bool,
     /// Whether the line grows where its content needs more room after a break. A box that
-    /// spans several rows of a grid or table does not, as in Chrome: its content then reaches
-    /// out of it.
+    /// spans several rows of a grid or table does not, as in Chrome, nor does one in a grid
+    /// row of a fixed size (see `Layouter::grid`): its content then reaches out of it.
     pub(crate) grows: bool,
     /// How far its fragment reaches above and below its border box (table cells with
     /// collapsing borders, which share them with the rows around).
@@ -71,6 +71,9 @@ pub(crate) struct Portion {
     /// The boxes (by index in the line) whose fragments in the part draw only their borders
     /// (see [`LineBoxes::ends_open`]).
     pub(crate) bare: Vec<usize>,
+    /// Where the line ends on the page while boxes of it go on past its end (see
+    /// [`split_line`]): a token per box, `None` for the boxes that are done.
+    pub(crate) outlived: Option<Vec<Option<BreakToken>>>,
 }
 
 /// How a line lays out its boxes on a page.
@@ -343,6 +346,12 @@ fn monolithic_overflow(
 /// line's unbroken height; `continued` tells where the boxes continue if the line started on
 /// an earlier page. `None` means that the line moves to the next page as a whole: its first
 /// row does not fit and it does not start the page (`at_top`).
+///
+/// A flex or grid line does not grow for a box that ends on the page while the content that
+/// overflows it goes on, nor do the rows of a grid for the boxes that keep the height of their
+/// areas (see [`Piece::grows`]). Where the rest of the line fits on the page and only such
+/// boxes go on, the line ends there as it does unbroken, and they go on past its end
+/// ([`Portion::outlived`]) in parallel with what follows the line, as in Chrome.
 pub(crate) fn split_line(
     pieces: &[Piece],
     line_height: Au,
@@ -763,17 +772,33 @@ pub(crate) fn split_line_from(
                 None => piece.offset < start && incoming(index).is_none() && !piece.stretched,
             }
         });
-    let broken = waiting
-        || pushed.is_some()
-        || !moved.is_empty()
-        || overflow
-            .as_ref()
-            .map_or(natural_end > available && !all_done, |overflow| {
-                overflow.rest > Au::ZERO
+    // The line ends on the page, outlived by boxes that it does not grow for.
+    let outlived = pieces.first().is_some_and(|piece| piece.growth != Growth::None)
+        && !waiting
+        && pushed.is_none()
+        && moved.is_empty()
+        && overflow.is_none()
+        && natural_end <= available
+        && placed.iter().any(|(.., token)| token.is_some())
+        && placed.iter().all(|(index, .., token)| {
+            token.as_ref().is_none_or(|token| {
+                matches!(token, BreakToken::Overflow { .. }) || !flex && !pieces[*index].grows
             })
-        || placed.iter().any(|(.., token)| token.is_some());
+        });
+    let broken = !outlived
+        && (waiting
+            || pushed.is_some()
+            || !moved.is_empty()
+            || overflow
+                .as_ref()
+                .map_or(natural_end > available && !all_done, |overflow| {
+                    overflow.rest > Au::ZERO
+                })
+            || placed.iter().any(|(.., token)| token.is_some()));
     let content_end = placed
         .iter()
+        // (The boxes that outlive the line do not make it taller.)
+        .filter(|(.., token)| !outlived || token.is_none())
         .map(|(index, fragment, top, token)| {
             let piece = &pieces[*index];
             // A box laid out again taller makes its row grow to the end of its border box as it
@@ -1039,7 +1064,7 @@ pub(crate) fn split_line_from(
             } else {
                 end
             };
-            let wanted = end - top + outsets;
+            let wanted = (end - top + outsets).clamp_non_negative();
             if goes_on || !piece.grows || wanted > fragment.rect.height {
                 fragment.rect.height = if goes_on || !piece.grows {
                     wanted
@@ -1093,7 +1118,7 @@ pub(crate) fn split_line_from(
     for &index in &ended {
         tokens[index] = Some(BreakToken::Ended);
     }
-    let next = broken.then(|| {
+    let (next, outlived) = if broken {
         let offset = match &overflow {
             // The line goes on with its rest after the overflow: as the end of its height, which
             // the boxes that are done fill.
@@ -1102,14 +1127,17 @@ pub(crate) fn split_line_from(
                 forced_at.unwrap_or_else(|| pushed.map_or(start + line_end, |row| row.min(start + line_end)))
             }
         };
-        (tokens, offset)
-    });
+        (Some((tokens, offset)), None)
+    } else {
+        (None, outlived.then_some(tokens))
+    };
     Some(Portion {
         fragments,
         height,
         next,
         rows_end,
         bare,
+        outlived,
     })
 }
 

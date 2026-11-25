@@ -22,6 +22,8 @@ All notable changes to this project are documented in this file. The format is b
 ### Fixed
 
 - A stretched item of a flex container with a fixed height (a single row) that breaks across more than two pages keeps its content: from its third page on, Fagus drew the item empty and left the rest of its content out. The item ends where its height does, and content taller than it overflows it on the pages after, as in Chrome.
+- A grid item whose content is taller than its rows of fixed sizes and reaches past the end of the page is as tall as its rows, and the grid with it, as in Chrome: the content overflows them on the pages after, beside what follows the grid, which stays where it is. Fagus let the item and the grid grow down those pages with the content, and where the item spans several rows gave its box a negative height on the last of them. Rows grow for an item that breaks only where Chrome's do: a single row whose size follows its content (`auto`, `min-content`, `max-content`, `fit-content()`, a flexible size, or a fixed minimum with one of these as maximum in a grid whose `height` is `auto`), not a row of a fixed size, a row with a fixed minimum in a grid with a `height`, or several rows that an item spans.
+- A flex line ends where its items do when one of them, of a fixed height, ends on the page and only the content that overflows it goes on: the items beside it are stretched to the height of the line, and the lines and the content after the container follow on the same page, as in Chrome. Fagus stretched the line to the end of every page that the overflowing content reached.
 
 ## [1.1.1] - 2026-11-25
 

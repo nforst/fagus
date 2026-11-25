@@ -44,10 +44,9 @@ fn text_at_sizes_and_spacings_past_any_number_has_finite_glyphs() {
 }
 
 #[test]
-#[ignore = "open: the box of the item goes on over the pages its content overflows onto and ends with a negative height"]
 fn a_grid_item_that_spans_rows_and_overflows_across_pages_has_no_negative_height() {
     // Found by the fuzz target. Chrome ends the box of the item after its 100 pixels and lets
-    // the content overflow; Fagus draws it down four pages and gives it -700 pixels on the fifth.
+    // the content overflow; Fagus drew it down four pages and gave it -700 pixels on the fifth.
     holds(
         "<style>@page { size: 300px 200px; margin: 0 } body { margin: 0 } \
          .grid { display: grid; grid-template-rows: 50px 50px } .item { grid-row: 1 / 3 }</style>\
