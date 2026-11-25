@@ -378,3 +378,25 @@ fn breaks_inside_a_box_that_avoids_it_after_a_heading_at_the_top_of_the_page() {
     );
     assert_eq!(place(&pages, "l15").map(|(page, _, y)| (page, y)), Some((2, 0.0)));
 }
+
+#[test]
+fn breaks_between_boxes_before_rather_than_inside_one_that_avoids_it() {
+    // The break before the last box is avoided, but the box before it holds a break that
+    // nothing avoids (between its second and third box, deeper in): that one is taken rather
+    // than a break inside the last box, which avoids breaks inside, as in Chrome
+    // (css/css-break/break-between-avoid-003.html).
+    let square = |text: &str| format!("<div style='height: 90px; break-inside: avoid'>{text}</div>");
+    let pages = render(
+        "",
+        &format!(
+            "<div>{}<div><div>{}{}</div></div></div><div style='break-before: avoid; height: \
+             90px; break-inside: avoid'>s4</div>",
+            square("s1"),
+            square("s2"),
+            square("s3")
+        ),
+    );
+    assert_eq!(place(&pages, "s2").map(|(page, _, y)| (page, y)), Some((0, 90.0)));
+    assert_eq!(place(&pages, "s3").map(|(page, _, y)| (page, y)), Some((1, 0.0)));
+    assert_eq!(place(&pages, "s4").map(|(page, _, y)| (page, y)), Some((1, 90.0)));
+}

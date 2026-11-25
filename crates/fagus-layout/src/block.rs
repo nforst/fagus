@@ -2624,28 +2624,45 @@ impl<'a> Layouter<'a> {
                     // fewer lines than `orphans` and `widows` ask for is the better one, as in
                     // Chrome (`kBreakAppealViolatingOrphansAndWidows` ranks above
                     // `kBreakAppealViolatingBreakAvoid`).
-                    let outcome = match outcome {
-                        None if !past_end
-                            && (space.at_top || self.last_resort_column.get())
-                            && only_avoided_breaks(&before, &history) =>
-                        {
+                    let only_avoided = !past_end
+                        && (space.at_top || self.last_resort_column.get())
+                        && only_avoided_breaks(&before, &history);
+                    let mut outcome = match outcome {
+                        None if only_avoided => {
                             self.truncate_floats(count);
                             let outer = self.poor_lines.replace(true);
-                            let mut retried = self.block_level(child, child_space, child_token);
-                            // Or, where that does not place it either, a break inside the boxes
-                            // in it that avoid breaks inside, which is as poor as the break
-                            // before it and later (see `Layouter::breaks_avoided_inside`).
-                            if retried.is_none() {
-                                self.truncate_floats(count);
-                                let inside = self.breaks_avoided_inside.replace(true);
-                                retried = self.block_level(child, child_space, child_token);
-                                self.breaks_avoided_inside.set(inside);
-                            }
+                            let retried = self.block_level(child, child_space, child_token);
                             self.poor_lines.set(outer);
                             retried
                         }
                         outcome => outcome,
                     };
+                    // Where the break before the child is avoided, the box before it breaks
+                    // inside instead, at its last break on the page, where it can (see below).
+                    let avoid_before =
+                        before.avoid_before || history.last().is_some_and(|last| last.avoid_after);
+                    let broken_before = match outcome {
+                        None if avoid_before && placed && child_token.is_none() => {
+                            self.truncate_floats(count);
+                            history.last().copied().and_then(|last| {
+                                self.break_inside_before(boxes, last, &children)
+                                    .map(|broken| (last, broken))
+                            })
+                        }
+                        _ => None,
+                    };
+                    // Otherwise a break inside the boxes in the child that avoid breaks inside,
+                    // which is as poor as the break before it and later (see
+                    // `Layouter::breaks_avoided_inside`), but not as good as a break in the box
+                    // before that nothing avoids.
+                    if outcome.is_none() && only_avoided && broken_before.is_none() {
+                        self.truncate_floats(count);
+                        let outer = self.poor_lines.replace(true);
+                        let inside = self.breaks_avoided_inside.replace(true);
+                        outcome = self.block_level(child, child_space, child_token);
+                        self.breaks_avoided_inside.set(inside);
+                        self.poor_lines.set(outer);
+                    }
                     // A box that must not overlap floats, laid out in the room beside them, may
                     // be taller than that room: it goes where there is room for its height and
                     // is laid out again there, as Blink tries the layout opportunities in turn
@@ -2720,12 +2737,7 @@ impl<'a> Layouter<'a> {
                         // where it can: that later break is the better one, as in Chrome (Blink
                         // takes the latest of the breaks of the best appeal, inside the boxes
                         // before too).
-                        if avoid
-                            && placed
-                            && child_token.is_none()
-                            && let Some(last) = history.last().copied()
-                            && let Some(broken) = self.break_inside_before(boxes, last, &children)
-                        {
+                        if let Some((last, broken)) = broken_before {
                             children.truncate(last.children);
                             self.truncate_floats(last.floats);
                             y = broken.fragment.rect.y + broken.fragment.rect.height;
