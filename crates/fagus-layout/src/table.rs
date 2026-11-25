@@ -5029,7 +5029,9 @@ fn collapsed_pieces(
                 false,
             );
             let x = lines[column] - start;
-            let width = lines[column + 1] + end - x;
+            // A border that stops short of joints wider than its column is long has no length
+            // left, not a negative one.
+            let width = (lines[column + 1] + end - x).clamp_non_negative();
             if row < rows {
                 borders[row].push(border_piece(
                     border,
@@ -5067,7 +5069,8 @@ fn collapsed_pieces(
                 false,
                 false,
             );
-            let rect = Rect::new(line - thickness / 2, -start, thickness, height + end + start);
+            let length = (height + end + start).clamp_non_negative();
+            let rect = Rect::new(line - thickness / 2, -start, thickness, length);
             borders[row].push(border_piece(border, rect, false, styles));
         }
     }
