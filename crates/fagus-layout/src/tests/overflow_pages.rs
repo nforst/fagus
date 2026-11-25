@@ -544,3 +544,41 @@ fn breaks_tables_after_rows_that_end_with_monolithic_overflow() {
     let (document, pages) = render(&table(400, ""));
     assert_eq!(top_of(&document, &pages, "after"), Some((3, 150.0)));
 }
+
+/// A document with `after` 10px tall after `body`.
+fn before_after(body: &str) -> (fagus_dom::Document, Vec<Page>) {
+    render(&format!("{body}<div class=after style='height: 10px'></div>"))
+}
+
+/// Four boxes 180px tall that avoid breaks inside them: one fits on a page, so every break
+/// takes 80px of the height of the box around them.
+const BOXES: &str = "<div class=b style='height: 180px; break-inside: avoid'></div>\
+                     <div class=b style='height: 180px; break-inside: avoid'></div>\
+                     <div class=b style='height: 180px; break-inside: avoid'></div>\
+                     <div class=b style='height: 180px; break-inside: avoid'></div>";
+
+#[test]
+fn keeps_the_content_of_stretched_flex_items_past_their_second_page() {
+    // The item is as tall as its container, 700px, and ends 180px down the third page; its
+    // content of 900px goes on there and overflows it onto the fourth, as in Chrome. (The
+    // content was lost from the third page on.)
+    let (document, pages) = before_after(
+        "<div style='display: flex; height: 700px'><div class=i style='width: 100%'>
+         <div class=c style='height: 900px'></div></div></div>",
+    );
+    assert_eq!(pages.len(), 4);
+    assert_eq!(span_of(&document, &pages, 1, "i"), Some((0.0, 260.0)));
+    assert_eq!(span_of(&document, &pages, 2, "i"), Some((0.0, 180.0)));
+    assert_eq!(span_of(&document, &pages, 2, "c"), Some((0.0, 260.0)));
+    assert_eq!(span_of(&document, &pages, 3, "c"), Some((0.0, 120.0)));
+    assert_eq!(top_of(&document, &pages, "after"), Some((2, 180.0)));
+    // Each break takes 80px of the item's 720px: the fourth box overflows it.
+    let (document, pages) = before_after(&format!(
+        "<div style='display: flex; height: 720px'><div class=i style='width: 100%'>{BOXES}</div></div>"
+    ));
+    assert_eq!(pages.len(), 4);
+    assert_eq!(span_of(&document, &pages, 2, "i"), Some((0.0, 200.0)));
+    assert_eq!(span_of(&document, &pages, 2, "b"), Some((0.0, 180.0)));
+    assert_eq!(span_of(&document, &pages, 3, "b"), Some((0.0, 180.0)));
+    assert_eq!(top_of(&document, &pages, "after"), Some((2, 200.0)));
+}

@@ -19,6 +19,10 @@ All notable changes to this project are documented in this file. The format is b
 - Page counters in a named string (`string-set: chapter content() ", page " counter(page)`) count the page of the element that sets the string also where `string()` shows it in the content of the document (`::before`, `::after`, repeated table rows), as they did in margin boxes and as the documentation says. There, `counter(page)`, `counter(-fagus-next-page)` and `counter(-fagus-previous-page)` took the page that shows the string. The specification leaves the page open ([csswg-drafts #4740](https://github.com/w3c/csswg-drafts/issues/4740)); this is how Fagus reads it.
 - The elements inside an element with `display: none` set their named strings too, in document order, where the hidden element sets its own: `title { string-set: doctitle content() }` puts the title of the document into a margin box, as the `<head>` is such an element, and so do hidden blocks of metadata. Before, only the hidden element itself set its strings and `string-set` on the elements in it was ignored. Counters do not change in a hidden element, as before. The specification leaves the elements inside open ([csswg-drafts #8404](https://github.com/w3c/csswg-drafts/issues/8404)); this is how Fagus reads it.
 
+### Fixed
+
+- A stretched item of a flex container with a fixed height (a single row) that breaks across more than two pages keeps its content: from its third page on, Fagus drew the item empty and left the rest of its content out. The item ends where its height does, and content taller than it overflows it on the pages after, as in Chrome.
+
 ## [1.1.1] - 2026-11-25
 
 ### Changed

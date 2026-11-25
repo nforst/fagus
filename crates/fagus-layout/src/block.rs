@@ -2961,6 +2961,17 @@ impl<'a> Layouter<'a> {
             )));
         }
         let mut broken = next_token.is_some();
+        // What is left of the content height of a box that keeps the height it is given (see
+        // `Layouter::fixed_item_height`), which is `definite`: where the box goes on from a page
+        // before, it is given only the rest of its height (see `Layouter::stretched_rest`),
+        // without its top border and padding.
+        let fixed_rest = |definite: Au| match token {
+            Some(_) if height_override.is_some() && !clones => {
+                definite + model.border[TOP] + model.padding[TOP]
+            }
+            Some(token) => definite - token.consumed(),
+            None => definite,
+        };
         // A box whose height does not depend on all of its content ends on the page where what
         // is left of its height does, as in Chrome: the content that overflows it continues on
         // the next pages without it (`Overflow` tokens).
@@ -2977,7 +2988,7 @@ impl<'a> Layouter<'a> {
             let earlier = token.map_or(Au::ZERO, BreakToken::consumed);
             let content = y - top;
             let own = match definite {
-                Some(definite) if fixed_height => definite - earlier,
+                Some(definite) if fixed_height => fixed_rest(definite),
                 _ => {
                     Self::used_height(
                         style,
@@ -3088,7 +3099,7 @@ impl<'a> Layouter<'a> {
                 content_height
             }
         } else if fixed_height && let Some(definite) = definite {
-            (definite - earlier).clamp_non_negative()
+            fixed_rest(definite).clamp_non_negative()
         } else if matches!(style.height, Size::Stretch)
             && height_override.is_some()
             && let Some(definite) = definite
@@ -4709,6 +4720,9 @@ impl<'a> Layouter<'a> {
             containing_height: item.containing_height,
             ..Space::unfragmented(item.containing_width)
         };
+        // (Whether the part keeps the height it is given, which the item laid out whole to see
+        // whether it fits does not.)
+        let fixed = self.fixed_item_height.replace(false);
         let whole = || {
             let outcome = self.item_in(
                 item.id,
@@ -4740,6 +4754,7 @@ impl<'a> Layouter<'a> {
                 return Some(outcome);
             }
         }
+        self.fixed_item_height.set(fixed);
         match &layout_box.kind {
             BoxKind::Block { .. } | BoxKind::Inline { .. } => {
                 self.block_container_with(item.id, space, token, item.width, height, true)
