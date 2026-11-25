@@ -1,5 +1,5 @@
 # The actions of the workflows are pinned to commits, with their versions in comments; Dependabot
-# proposes the commits of new versions.
+# proposes the commits of new versions, all of a week in one pull request.
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -8,3 +8,7 @@ updates:
       interval: weekly
     commit-message:
       prefix: ci
+    groups:
+      actions:
+        patterns:
+          - "*"

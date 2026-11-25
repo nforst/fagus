@@ -44,7 +44,7 @@ jobs:
           - { target: x86_64-unknown-freebsd, os: ubuntu-latest, freebsd: '14' }
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Check the version
         shell: bash
         run: |
@@ -117,14 +117,14 @@ jobs:
             --target "${{ matrix.target }}" --spec-version 1.5 \
             --override-filename "fagus-${{ matrix.target }}.cdx"
           mv "crates/fagus-cli/fagus-${{ matrix.target }}.cdx.json" dist/
-      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: dist/fagus-${{ matrix.target }}*
-      - uses: actions/attest-sbom@bd218ad0dbcb3e146bd073d1d9c6d78e08aa8a0b # v2.4.0
+      - uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
         with:
           subject-path: dist/fagus-${{ matrix.target }}${{ contains(matrix.target, 'windows') && '.exe' || '' }}
           sbom-path: dist/fagus-${{ matrix.target }}.cdx.json
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: fagus-${{ matrix.target }}
           path: dist/*
@@ -151,7 +151,7 @@ jobs:
     env:
       NAME: fagus-ffi-${{ matrix.target }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Check the version
         run: |
           grep -q "^version = \"$VERSION\"$" Cargo.toml || { echo "Cargo.toml is not at version $VERSION"; exit 1; }
@@ -188,14 +188,14 @@ jobs:
           cargo cyclonedx --manifest-path crates/fagus-ffi/Cargo.toml --format json --all \
             --target "${{ matrix.target }}" --spec-version 1.5 --override-filename "$NAME.cdx"
           mv "crates/fagus-ffi/$NAME.cdx.json" dist/
-      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: dist/${{ env.NAME }}*
-      - uses: actions/attest-sbom@bd218ad0dbcb3e146bd073d1d9c6d78e08aa8a0b # v2.4.0
+      - uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
         with:
           subject-path: dist/${{ env.NAME }}.tar.gz
           sbom-path: dist/${{ env.NAME }}.cdx.json
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ env.NAME }}
           path: dist/*
@@ -212,7 +212,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: fagus-x86_64-unknown-freebsd
           path: dist
@@ -233,10 +233,10 @@ jobs:
     needs: [build, library, freebsd-15]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: source
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: dist
           pattern: fagus-*
@@ -244,7 +244,7 @@ jobs:
       - name: Sum
         working-directory: dist
         run: sha256sum fagus-* > SHA256SUMS && cat SHA256SUMS
-      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: dist/SHA256SUMS
       # The licenses of the code and data of others in the binaries (tools/notices.sh).

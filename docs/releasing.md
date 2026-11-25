@@ -40,7 +40,7 @@ CHROME=/path/to/chrome tools/chrome-corpus.sh /tmp/fagus-chrome   # pdftoppm; Li
 
 `tools/validate.sh` downloads veraPDF, Mustang and qpdf at the versions it names into `target/validate-tools` and checks them against their SHA-256; `VERAPDF`, `MUSTANG` and `QPDF` choose others. To update a tool, change its version and sum in the script.
 
-The workflows name the actions they use by commit, with the version in a comment (`uses: actions/checkout@<sha> # v4.4.0`), so that a tag moved to other code changes nothing here; Dependabot (`.github/dependabot.yml`) proposes the commits of new versions every week.
+The workflows name the actions they use by commit, with the version in a comment (`uses: actions/checkout@<sha> # v7.0.1`), so that a tag moved to other code changes nothing here; Dependabot (`.github/dependabot.yml`) proposes the commits of new versions every week, in one pull request.
 
 ## Composer
 
