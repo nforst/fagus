@@ -809,6 +809,14 @@ fn reads_svg_images_with_other_white_space_in_their_root_tag() {
     renders(&format!("<p>x</p>{svg}"));
 }
 
+#[test]
+fn reads_srcset_descriptors_that_end_with_a_character_of_several_bytes() {
+    // Found by the fuzz target `invariants`: the unit of a descriptor was taken for its last
+    // byte, and the descriptor was cut inside the character.
+    renders("<img src=a.png srcset='a.png 640w\u{f2}, b.png 2x'>");
+    renders("<picture><source srcset='a.png 2\u{d7}'><img src=a.png></picture>");
+}
+
 /// An `<img>` of an SVG document, as a `data:` URL.
 fn svg_image(svg: &str) -> String {
     let encoded: String = svg

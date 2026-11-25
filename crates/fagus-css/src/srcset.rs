@@ -104,7 +104,8 @@ pub fn parse_srcset(srcset: &str) -> Vec<Candidate<'_>> {
 fn descriptor(tokens: &[&str]) -> Option<Descriptor> {
     let (mut width, mut density, mut height) = (None, None, None);
     for token in tokens {
-        let (number, unit) = token.split_at(token.len().checked_sub(1)?);
+        // (The last character, which may take more than one byte.)
+        let (number, unit) = token.split_at(token.char_indices().next_back()?.0);
         match unit {
             "w" if width.is_none() && density.is_none() => {
                 let value: u32 = number
@@ -392,6 +393,15 @@ mod tests {
             vec![Candidate {
                 url: "a.png",
                 descriptor: Descriptor::Width(100.0)
+            }]
+        );
+        // A descriptor that ends with a character of several bytes is invalid, like any other
+        // unit.
+        assert_eq!(
+            parse_srcset("a.png 640w\u{f2}, b.png 2\u{d7}, c.png 2x"),
+            vec![Candidate {
+                url: "c.png",
+                descriptor: Descriptor::Density(2.0)
             }]
         );
     }
