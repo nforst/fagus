@@ -7,7 +7,7 @@
 //! |---|---|
 //! | [`Invariant::Internal`] | Rendering does not end in an internal error |
 //! | [`Invariant::Finite`] | Every number of the pages, glyphs and reported boxes is finite |
-//! | [`Invariant::Sizes`] | No fragment, page or reported box has a negative size; a page is shrunk by a scale in (0, 1]; the clusters of glyphs lie in the text of their run |
+//! | [`Invariant::Sizes`] | No fragment, page or reported box has a negative size, but text with negative spacing; a page is shrunk by a scale in (0, 1]; the clusters of glyphs lie in the text of their run |
 //! | [`Invariant::Placeholder`] | No placeholder of a positioned box is left in the pages |
 //! | [`Invariant::PageCount`] | A document has 1 to [`fagus_layout::MAX_PAGES`] pages, as many as the output and the reported layout say, with a warning at the limit |
 //! | [`Invariant::Deterministic`] | Rendering again gives the same bytes, pages and reported layout, or fails the same way |
@@ -436,7 +436,11 @@ impl Checker<'_> {
         self.stats.fragments += 1;
         let rect = fragment.rect;
         let at = Some((path, rect));
-        if rect.width.0 < 0 || rect.height.0 < 0 {
+        // Text is as long as its advances add up to, which is less than nothing where negative
+        // `letter-spacing` or `word-spacing` takes more than the glyphs are wide.
+        let pulled_together = matches!(&fragment.kind, FragmentKind::Text(run)
+            if run.style.letter_spacing < 0.0 || run.style.word_spacing < 0.0);
+        if (rect.width.0 < 0 || rect.height.0 < 0) && !pulled_together {
             self.on_page(
                 Invariant::Sizes,
                 "a fragment has a negative size".to_owned(),
@@ -688,6 +692,12 @@ mod tests {
                     <div style='zoom: 1e30; font-size: 1e30px; letter-spacing: 1e30px'>y z</div>";
         let stats = check(&Engine::new(), &Document::html(html)).expect("holds");
         assert!(stats.saturated > 0);
+    }
+
+    #[test]
+    fn text_pulled_together_may_be_shorter_than_nothing() {
+        let html = "<p style='letter-spacing: -100px'>abc</p><p style='word-spacing: -3e38px'>a b c</p>";
+        check(&Engine::new(), &Document::html(html)).expect("holds");
     }
 
     #[test]
