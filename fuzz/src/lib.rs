@@ -1,5 +1,5 @@
-//! What the fuzz targets share: an engine with the fonts of the tests, and a check that
-//! rendering did not end in an internal error.
+//! What the fuzz targets share: an engine with the fonts of the tests, a check that rendering
+//! did not end in an internal error, and one that the layout holds its invariants.
 //!
 //! libFuzzer's panic hook aborts the process on a panic, even one the engine would catch, so a
 //! panic anywhere in the engine is reported as a crash. Only the panics of the CSS parser that
@@ -44,6 +44,14 @@ pub fn render(document: &Document) {
     match engine().render(&document.clone().created(date())) {
         Err(Error::Internal(message)) => panic!("internal error: {message}"),
         Ok(_) | Err(_) => {}
+    }
+}
+
+/// Renders `document` twice and checks what holds for the layout of every document
+/// (`fagus_invariants`): the first invariant that does not hold is a panic with where it broke.
+pub fn check(document: &Document) {
+    if let Err(violation) = fagus_invariants::check(engine(), document) {
+        panic!("{violation}");
     }
 }
 

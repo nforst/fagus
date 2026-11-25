@@ -19,6 +19,8 @@ arbitrary = { version = "1.5.0", features = ["derive"] }
 # Without `parallel`: one thread writes the PDF, which keeps runs reproducible.
 fagus = { path = "../crates/fagus", default-features = false }
 fagus-css = { path = "../crates/fagus-css" }
+# For the invariants target. It turns on `inspect` of fagus, for every target: features add up.
+fagus-invariants = { path = "../crates/fagus-invariants" }
 fagus-dom = { path = "../crates/fagus-dom" }
 fagus-style = { path = "../crates/fagus-style" }
 fagus-text = { path = "../crates/fagus-text" }
@@ -43,6 +45,13 @@ panic = "unwind"
 [[bin]]
 name = "render"
 path = "fuzz_targets/render.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "invariants"
+path = "fuzz_targets/invariants.rs"
 test = false
 doc = false
 bench = false

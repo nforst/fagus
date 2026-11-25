@@ -23,6 +23,9 @@ seed() {
 }
 
 seed render 65536 -name '*.html' -o -name '*.xhtml'
+# The same input as render, and so its seeds.
+seed invariants 65536 -name '*.html' -o -name '*.xhtml'
+cp "$fuzz/seeds/render"/* "$fuzz/corpus/invariants/"
 seed css 262144 -name '*.css'
 seed font 1048576 -name '*.ttf' -o -name '*.otf' -o -name '*.ttc' -o -name '*.woff' -o -name '*.woff2'
 seed image 262144 -name '*.png' -o -name '*.jpg' -o -name '*.jpeg' -o -name '*.gif' -o -name '*.webp' \
