@@ -1024,9 +1024,12 @@ mod tests {
         assert!(sign(b"%PDF-1.7\nnot really", &pkcs12("rsa.p12"), TIME).is_err());
     }
 
-    /// A time-stamping authority with the test certificates, through `openssl ts`.
+    /// A time-stamping authority with the test certificates, through `openssl ts`, in a
+    /// directory of its own for each request (the tests run at once).
     fn openssl_timestamp(digest: &[u8]) -> Result<Vec<u8>, String> {
-        let directory = std::env::temp_dir().join(format!("fagus-tsa-{}", std::process::id()));
+        static REQUESTS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let request = REQUESTS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let directory = std::env::temp_dir().join(format!("fagus-tsa-{}-{request}", std::process::id()));
         std::fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
         let configuration = format!(
             "[tsa]\ndefault_tsa = test\n[test]\nserial = {}\nsigner_cert = {}\nsigner_key = {}\n\
@@ -1054,7 +1057,9 @@ mod tests {
         if !output.status.success() {
             return Err(String::from_utf8_lossy(&output.stderr).into_owned());
         }
-        std::fs::read(directory.join("response.tsr")).map_err(|error| error.to_string())
+        let response = std::fs::read(directory.join("response.tsr")).map_err(|error| error.to_string());
+        std::fs::remove_dir_all(&directory).ok();
+        response
     }
 
     #[test]
