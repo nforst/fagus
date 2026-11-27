@@ -6,10 +6,11 @@
 # documents that are heavy but legitimate: the engine stops at 10,000 pages and 200 megapixels
 # per image, which takes seconds, so only a minute without an answer counts as a hang.
 #
-# Targets are built without a sanitizer but with overflow checks and debug assertions: the
-# engine has no unsafe code, and AddressSanitizer makes rendering (drawing filters, decoding
-# images) five to ten times slower. FUZZ_SANITIZER=address turns it on, for the unsafe code in
-# dependencies.
+# Targets are built without a sanitizer but with overflow checks and debug assertions, which
+# the release profile of Cargo.toml turns on (with -O, cargo-fuzz leaves them to the profile, which
+# can leave them off for one dependency): the engine has no unsafe code, and AddressSanitizer makes
+# rendering (drawing filters, decoding images) five to ten times slower. FUZZ_SANITIZER=address
+# turns it on, for the unsafe code in dependencies.
 set -euo pipefail
 
 cd "$(dirname "$0")"
@@ -38,6 +39,6 @@ esac
 # cargo-fuzz builds for the platform it was itself built for unless told otherwise; prebuilt
 # binaries of cargo-fuzz (as in CI) are built for musl, whose standard library nightly lacks here.
 host=$(rustc +nightly -vV | sed -n 's/^host: //p')
-exec cargo +nightly fuzz run --target "$host" --sanitizer "${FUZZ_SANITIZER:-none}" "$target" "corpus/$target" -- \
+exec cargo +nightly fuzz run -O --target "$host" --sanitizer "${FUZZ_SANITIZER:-none}" "$target" "corpus/$target" -- \
     -max_total_time="$seconds" -timeout=60 -rss_limit_mb=4096 -print_final_stats=1 \
     "${options[@]}" "$@"

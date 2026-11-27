@@ -38,9 +38,21 @@ libc = "0.2.191"
 [lints.rust]
 unsafe_code = "deny"
 
+# run.sh builds with `cargo fuzz run -O`, so these settings, not cargo-fuzz's flags, decide the
+# checks: overflow checks and debug assertions for the engine and every dependency but one.
 [profile.release]
 debug = 1
 panic = "unwind"
+overflow-checks = true
+debug-assertions = true
+
+# The AV1 decoder overflows where its C original, dav1d, wraps an unsigned number (`read_golomb` in
+# recon.rs), and it panics inside its `extern "C"` functions, which aborts instead of unwinding.
+# Built as the release build of the engine builds it, without the checks, until rav1d wraps there
+# itself.
+[profile.release.package.re_rav1d]
+overflow-checks = false
+debug-assertions = false
 
 [[bin]]
 name = "render"

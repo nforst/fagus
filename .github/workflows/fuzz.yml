@@ -64,7 +64,7 @@ jobs:
         if: success()
         run: |
           host=$(rustc +nightly -vV | sed -n 's/^host: //p')
-          cargo +nightly fuzz cmin --target "$host" --sanitizer "$FUZZ_SANITIZER" ${{ matrix.target }} fuzz/corpus/${{ matrix.target }} -- -timeout=60 -rss_limit_mb=4096
+          cargo +nightly fuzz cmin -O --target "$host" --sanitizer "$FUZZ_SANITIZER" ${{ matrix.target }} fuzz/corpus/${{ matrix.target }} -- -timeout=60 -rss_limit_mb=4096
       - name: Save the corpus
         if: always()
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
