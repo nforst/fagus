@@ -20,6 +20,8 @@ mod date;
 mod layout_json;
 #[path = "../../crates/fagus-cli/src/memory.rs"]
 mod memory;
+#[path = "../../crates/fagus-cli/src/merge.rs"]
+mod merge;
 #[path = "../../crates/fagus-cli/src/request.rs"]
 mod request;
 #[path = "../../crates/fagus-cli/src/worker.rs"]
@@ -50,6 +52,7 @@ mod sandbox {
 #[derive(Arbitrary, Debug)]
 enum Message {
     Render(Render),
+    Merge(Merge),
     Font(Vec<u8>),
     Resource {
         found: Option<bool>,
@@ -108,6 +111,64 @@ struct Render {
     blobs: Vec<Vec<u8>>,
     /// Other fields, of any value.
     extra: Vec<(String, Scalar)>,
+}
+
+/// A merge request (`M`): PDFs of the tests or arbitrary data, with pages that may not fit them.
+#[derive(Arbitrary, Debug)]
+struct Merge {
+    id: u64,
+    inputs: Vec<(u8, Option<Word>)>,
+    /// Whether the PDFs of the tests come first among the data blocks.
+    fixtures: bool,
+    created: Option<Word>,
+    limits: Option<(u16, u16)>,
+    blobs: Vec<Vec<u8>>,
+}
+
+const PAGES: &[&str] = &["1", "2", "2,1", "1-", "3-", "1-2,1", "0", "2-1"];
+const PDFS: &[&str] = &[
+    "pdf/shapes.pdf",
+    "pdf/repaired.pdf",
+    "pdf/restricted.pdf",
+    "letterhead.pdf",
+];
+
+impl Merge {
+    fn header(&self) -> Value {
+        let mut map = Map::new();
+        map.insert("id".to_owned(), Value::from(self.id));
+        map.insert(
+            "inputs".to_owned(),
+            self.inputs
+                .iter()
+                .map(|(blob, pages)| {
+                    let mut input = Map::new();
+                    input.insert("blob".to_owned(), Value::from(*blob));
+                    optional(&mut input, "pages", pages.as_ref().map(|pages| pages.of(PAGES)));
+                    Value::Object(input)
+                })
+                .collect(),
+        );
+        optional(
+            &mut map,
+            "created",
+            self.created.as_ref().map(|date| date.of(DATES)),
+        );
+        if let Some((kib, milliseconds)) = self.limits {
+            map.insert("memoryBudget".to_owned(), Value::from((u64::from(kib) + 1) << 10));
+            map.insert("timeLimit".to_owned(), Value::from(u64::from(milliseconds) + 1));
+        }
+        Value::Object(map)
+    }
+
+    fn blobs(&self) -> Vec<Vec<u8>> {
+        let media = concat!(env!("CARGO_MANIFEST_DIR"), "/../tests/corpus/images/media");
+        let fixtures = PDFS
+            .iter()
+            .filter(|_| self.fixtures)
+            .filter_map(|name| std::fs::read(format!("{media}/{name}")).ok());
+        fixtures.chain(self.blobs.iter().cloned()).collect()
+    }
 }
 
 #[derive(Arbitrary, Debug)]
@@ -280,6 +341,7 @@ fn stream(messages: &[Message]) -> Vec<u8> {
     for message in messages {
         match message {
             Message::Render(render) => frame(&mut stream, b'R', render.header(), &render.blobs),
+            Message::Merge(merge) => frame(&mut stream, b'M', merge.header(), &merge.blobs()),
             Message::Font(data) => frame(&mut stream, b'F', json!({}), std::slice::from_ref(data)),
             Message::Resource { found, data } => {
                 let mut header = Map::new();

@@ -32,6 +32,7 @@ seed image 262144 -name '*.png' -o -name '*.jpg' -o -name '*.jpeg' -o -name '*.g
     -o -name '*.bmp' -o -name '*.tif' -o -name '*.tiff' -o -name '*.avif'
 seed avif 65536 -name '*.avif'
 seed pdf 65536 -name '*.pdf'
+seed merge 65536 -name '*.pdf'
 seed svg 262144 -name '*.svg'
 seed worker 1 -name '-'
 
