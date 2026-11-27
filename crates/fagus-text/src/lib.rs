@@ -2761,15 +2761,27 @@ impl Face {
 
 /// Whether face `index` of font data is sound enough to use, as Chrome's font sanitizer
 /// requires: its size of the em square is within the 16 to 16,384 units that OpenType allows
-/// (glyphs are scaled by it, so 0 made every size infinite), and its color tables are sound
-/// (see [`palette::color_tables_sound`]).
+/// (glyphs are scaled by it, so 0 made every size infinite), its color tables are sound
+/// (see [`palette::color_tables_sound`]) and its `post` table is (see [`post_sound`]).
 fn face_sound(data: &[u8], index: u32) -> bool {
     use skrifa::raw::TableProvider;
     skrifa::FontRef::from_index(data, index).is_ok_and(|font| {
         font.head()
             .is_ok_and(|head| (16..=16_384).contains(&head.units_per_em()))
             && palette::color_tables_sound(&font)
+            && font
+                .table_data(Tag::new(b"post"))
+                .is_none_or(|post| post_sound(post.as_bytes()))
     })
+}
+
+/// Whether a `post` table holds the number of glyphs where its version says it does: one of
+/// version 2.0 has it right after the 32 bytes of its header. krilla counts the glyph names of
+/// a font when it writes it, and the read-fonts it reads fonts with unwraps that number (a
+/// table shorter than the header it does not read at all). The bytes are looked at rather than
+/// parsed, so that what is found does not depend on a version of read-fonts.
+fn post_sound(post: &[u8]) -> bool {
+    !(post.starts_with(&0x0002_0000u32.to_be_bytes()) && (32..34).contains(&post.len()))
 }
 
 fn make_face(font: Font, data: Arc<Vec<u8>>, index: u32) -> Face {
@@ -3361,6 +3373,24 @@ fn shape_uncached(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn finds_a_post_table_of_version_2_that_ends_before_its_number_of_glyphs_unsound() {
+        use super::post_sound;
+        let post = |version: u32, length: usize| {
+            let mut table = version.to_be_bytes().to_vec();
+            table.resize(length, 0);
+            table
+        };
+        assert!(!post_sound(&post(0x0002_0000, 32)));
+        assert!(!post_sound(&post(0x0002_0000, 33)));
+        // With the number of glyphs, the names may be the standard ones and the table end there.
+        assert!(post_sound(&post(0x0002_0000, 34)));
+        // Other versions have no number of glyphs, and shorter tables are not read at all.
+        assert!(post_sound(&post(0x0003_0000, 32)));
+        assert!(post_sound(&post(0x0001_0000, 32)));
+        assert!(post_sound(&post(0x0002_0000, 31)));
+    }
+
     #[test]
     fn tells_cursive_scripts_from_others_and_from_characters_without_one() {
         use super::cursive_script;

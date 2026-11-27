@@ -5,6 +5,10 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Fixed
+
+- A font whose `post` table has version 2 but ends before its number of glyphs (a table cut short) made krilla panic while it wrote the PDF (in read-fonts), and as that happened while a page was drawn, the panic aborted the process that rendered, the CLI, the worker or a program with the engine, instead of ending the render with an error. Such a font is now one Fagus cannot read: as a web font it is left out with `font.unsupported` and the text takes the next family, `Engine::add_font_data()` refuses it, a font directory skips it, and an installed font is passed over.
+
 ## [1.2.0] - 2026-11-27
 
 ### Added

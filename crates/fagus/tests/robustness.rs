@@ -767,6 +767,36 @@ fn leaves_out_a_font_whose_em_square_has_no_size() {
     assert!(engine.add_font_data(inter).is_err());
 }
 
+#[test]
+fn leaves_out_a_font_whose_post_table_is_cut_short() {
+    // Found by the fuzz target `font`: a `post` table of version 2 that ends before its number
+    // of glyphs. krilla counts the glyph names of a font when it writes it, and read-fonts
+    // unwrapped that number: the document ended in an internal error.
+    let mut post = inter_table(b"post")[..32].to_vec();
+    post[..4].copy_from_slice(&0x0002_0000u32.to_be_bytes());
+    let font = with_table(inter(), b"post", &post);
+    let document = Document::html(
+        "<style>@font-face { font-family: F; src: url(f.ttf) } p { font-family: F }</style><p>ABC</p>",
+    )
+    .resource("f.ttf", font.clone());
+    let output = Engine::new().render(&document).expect("rendered");
+    assert_eq!(codes(&output), ["font.unsupported"]);
+    assert!(Engine::new().add_font_data(font).is_err());
+}
+
+/// The table `tag` of Inter, regular.
+fn inter_table(tag: &[u8; 4]) -> Vec<u8> {
+    let inter = inter();
+    let count = usize::from(u16::from_be_bytes([inter[4], inter[5]]));
+    let entry = (0..count)
+        .map(|index| 12 + 16 * index)
+        .find(|entry| &inter[*entry..*entry + 4] == tag)
+        .expect("the table");
+    let offset = u32::from_be_bytes(inter[entry + 8..entry + 12].try_into().expect("4 bytes")) as usize;
+    let length = u32::from_be_bytes(inter[entry + 12..entry + 16].try_into().expect("4 bytes")) as usize;
+    inter[offset..offset + length].to_vec()
+}
+
 /// The font file of Inter, regular.
 fn inter() -> Vec<u8> {
     std::fs::read(concat!(
