@@ -76,9 +76,7 @@ pub fn probe(data: Arc<Vec<u8>>, fragment: Option<&str>) -> Result<Image, PdfIma
         return Err(PdfImageError::NoPage(page + 1, pages.len()));
     };
     content_size(chosen.raw())?;
-    if !readable(&pdf, page as usize, Extraction::XObject)
-        || !complete(&pdf, page as usize, Extraction::XObject)
-    {
+    if !extractable(&pdf, page as usize, Extraction::XObject) {
         return Err(PdfImageError::Broken);
     }
     let (width, height) = chosen.render_dimensions();
@@ -138,12 +136,19 @@ pub(crate) enum Extraction {
     Page,
 }
 
+/// Whether krilla can extract the page `page` of `pdf` ([`readable`] and [`complete`]). hayro-syntax
+/// panics on a few broken objects, such as an array whose items cannot be read, which the
+/// extraction would read as well: such a page cannot be extracted either.
+pub(crate) fn extractable(pdf: &Pdf, page: usize, extraction: Extraction) -> bool {
+    fagus_css::guarded(|| readable(pdf, page, extraction) && complete(pdf, page, extraction)) == Some(true)
+}
+
 /// Whether every object that krilla's extraction of the page `page` of `pdf` reads can be read
 /// as it reads it: hayro-write takes the entries of a dictionary that cannot be read, and a
 /// stream where a direct object stands, for granted. It reads the page's resources, those of
 /// the pages above it, and what they refer to, as [`complete`] does; a page of its own also its
 /// transparency group.
-pub(crate) fn readable(pdf: &Pdf, page: usize, extraction: Extraction) -> bool {
+fn readable(pdf: &Pdf, page: usize, extraction: Extraction) -> bool {
     // The keys whose values hayro-write leaves out (its `IGNORE_KEYS`).
     const IGNORED: [&[u8]; 10] = [
         b"Metadata",
@@ -230,7 +235,7 @@ pub(crate) fn readable(pdf: &Pdf, page: usize, extraction: Extraction) -> bool {
 /// exist. krilla cannot write one that refers to missing objects (a reference to an object that
 /// is not in the file, which readers take as `null`). A page of its own refers to the page tree
 /// as well, which krilla writes.
-pub(crate) fn complete(pdf: &Pdf, page: usize, extraction: Extraction) -> bool {
+fn complete(pdf: &Pdf, page: usize, extraction: Extraction) -> bool {
     let mut next = pdf_writer::Ref::new(1);
     let Ok(extracted) = hayro_write::extract(
         pdf,

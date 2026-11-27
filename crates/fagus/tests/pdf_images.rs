@@ -287,4 +287,11 @@ fn leaves_out_pdf_files_that_krilla_cannot_write() {
     // A resource whose value hayro-syntax lists but cannot read (`/Bad#zz`).
     let output = render("<img src=t.pdf>", &[("t.pdf", fixture("pdf/bad-name.pdf"))]);
     assert_eq!(codes(&output), ["image.broken"]);
+    // An array whose items hayro-syntax cannot read, which it panics on (found by the fuzz
+    // target `merge`).
+    let output = render(
+        "<img src=t.pdf>",
+        &[("t.pdf", fixture("pdf/unreadable-array.pdf"))],
+    );
+    assert_eq!(codes(&output), ["image.broken"]);
 }
