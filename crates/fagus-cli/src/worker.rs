@@ -16,6 +16,7 @@ const MAX_FRAME: usize = 1 << 30;
 
 const HELLO: u8 = b'H';
 const RENDER: u8 = b'R';
+const MERGE: u8 = b'M';
 const ASK: u8 = b'?';
 const RESOURCE: u8 = b'r';
 const ASK_MANY: u8 = b'Q';
@@ -247,6 +248,18 @@ where
                     Answer::Error { header } => channel.write(ERROR, with_memory(header), &[])?,
                 }
                 // Once the answer is out, so that the caller does not wait for it.
+                drop(channel);
+                if trims {
+                    crate::memory::trim();
+                }
+            }
+            MERGE => {
+                let answer = crate::merge::answer(frame.header, frame.blobs, engine.limits());
+                let mut channel = lock(&channel)?;
+                match answer {
+                    Answer::Pdf { header, pdf } => channel.write(PDF, with_memory(header), &[&pdf])?,
+                    Answer::Error { header } => channel.write(ERROR, with_memory(header), &[])?,
+                }
                 drop(channel);
                 if trims {
                     crate::memory::trim();
@@ -533,6 +546,100 @@ mod tests {
         assert_eq!(frames[2].header["id"], 2);
         assert_eq!(frames[2].header["diagnostics"][0]["code"], "limit.time");
         assert_eq!(frames[3].header["id"], 3);
+    }
+
+    #[test]
+    fn merges_pdfs_and_says_what_it_cannot_merge() {
+        // Two PDFs to merge, rendered first by the same worker.
+        let mut input = frame(
+            RENDER,
+            &json!({ "id": 1, "html": 0, "created": "2026-11-02T12:00:00Z" }),
+            &[b"<p style='break-after: page'>Eins</p><p>Zwei</p>"],
+        );
+        input.extend(frame(
+            RENDER,
+            &json!({ "id": 2, "html": 0, "created": "2026-11-02T12:00:00Z" }),
+            &[b"<p>Drei</p>"],
+        ));
+        let output = Shared::default();
+        serve(engine(), io::Cursor::new(input), output.clone()).expect("served");
+        let rendered = frames(&output.0.lock().expect("lock"));
+        let (first, second) = (&rendered[1].blobs[0], &rendered[2].blobs[0]);
+
+        let mut input = frame(
+            MERGE,
+            &json!({
+                "id": 3,
+                "inputs": [{ "blob": 1, "pages": "1" }, { "blob": 0, "pages": null }, { "blob": 1, "pages": "2-" }],
+                "title": "Sammeldruck",
+                "authors": ["Buchhaltung"],
+                "language": "de-DE",
+                "created": "2026-11-27T12:00:00Z",
+            }),
+            &[second, first],
+        );
+        // The same without a date, twice: the same bytes.
+        for id in [4, 5] {
+            input.extend(frame(
+                MERGE,
+                &json!({ "id": id, "inputs": [{ "blob": 0 }, { "blob": 1 }] }),
+                &[first, second],
+            ));
+        }
+        for header in [
+            json!({ "id": 6, "inputs": [] }),
+            json!({ "id": 7, "inputs": [{ "blob": 0 }, { "blob": 1 }] }),
+            json!({ "id": 8, "inputs": [{ "blob": 0, "pages": "3" }] }),
+            json!({ "id": 9, "inputs": [{ "blob": 0, "pages": "x" }] }),
+            json!({ "id": 10, "inputs": [{ "blob": 2 }] }),
+            json!({ "id": 11, "inputs": [{ "blob": 0 }], "created": "gestern" }),
+            json!({ "id": 12, "inputs": [{ "blob": 0 }], "memoryBudget": 1024 }),
+            json!({ "id": 13 }),
+        ] {
+            input.extend(frame(MERGE, &header, &[first, b"kein PDF"]));
+        }
+        let output = Shared::default();
+        serve(engine(), io::Cursor::new(input), output.clone()).expect("served");
+        let frames = frames(&output.0.lock().expect("lock"));
+        assert_eq!(kinds(&frames), "HPPPEEEEEEEE");
+        let merged = &frames[1];
+        assert_eq!(merged.header["id"], 3);
+        assert_eq!(merged.header["pages"], 3);
+        assert_eq!(merged.header["diagnostics"], json!([]));
+        assert_eq!(merged.header["encrypted"], false);
+        assert!(merged.header["timings"]["pdf"].as_f64().is_some());
+        assert!(merged.blobs[0].starts_with(b"%PDF-1.7"));
+        assert_eq!(frames[2].header["pages"], 3);
+        assert_eq!(frames[2].blobs[0], frames[3].blobs[0]);
+        let messages: Vec<&str> = frames[4..]
+            .iter()
+            .map(|frame| frame.header["message"].as_str().unwrap_or_default())
+            .collect();
+        assert_eq!(
+            messages[..6],
+            [
+                "there are no PDF files to merge",
+                "the PDF at index 1 cannot be read: it is not a PDF file (it has no `%PDF-` header)",
+                "the PDF at index 0 has 2 pages, not page 3",
+                "invalid pages `x`: expected page numbers and ranges like `1-3,5,8-`",
+                "data block 2 is missing",
+                "invalid date `gestern`",
+            ]
+        );
+        assert!(
+            messages[6].starts_with("the document needs more memory than its budget"),
+            "{}",
+            messages[6]
+        );
+        assert_eq!(codes(&frames[10]), ["limit.memory"]);
+        assert!(
+            messages[7].starts_with("invalid request: missing field `inputs`"),
+            "{}",
+            messages[7]
+        );
+        for (frame, id) in frames[4..].iter().zip(6..) {
+            assert_eq!(frame.header["id"], id);
+        }
     }
 
     #[test]
