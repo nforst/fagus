@@ -197,7 +197,9 @@ fn counts_the_time_a_loader_takes() {
 
 #[test]
 fn counts_the_time_a_loader_takes_for_a_batch() {
-    // The limit is looked at after each batch a loader answers.
+    // The limit is looked at after each batch a loader answers: of the four batches the 200
+    // images make, at most the first is asked for (none where the limit has passed before it,
+    // as on a slow machine).
     struct Slow(AtomicUsize);
     impl ResourceLoader for Slow {
         fn load(&self, _: &str) -> Option<Vec<u8>> {
@@ -219,7 +221,7 @@ fn counts_the_time_a_loader_takes_for_a_batch() {
     let failure =
         render(&document, Limits::new().time(Some(Duration::from_millis(100)))).expect_err("too slow");
     assert!(matches!(failure.error, Error::TimeLimit { .. }));
-    assert_eq!(loader.0.load(Ordering::Relaxed), 1);
+    assert!(loader.0.load(Ordering::Relaxed) <= 1);
 }
 
 #[test]
