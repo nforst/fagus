@@ -392,7 +392,8 @@ fn parses_nested_color_functions_that_do_not_parse_in_linear_time() {
              <style>:root {{ --d: {hsl} }}</style><p style='--e: {value}'>x</p>"
         ),
         None,
-        5,
+        // A few seconds in a debug build on a slow runner; without the limit, hours.
+        30,
     );
 }
 

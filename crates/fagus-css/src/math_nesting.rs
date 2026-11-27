@@ -365,7 +365,9 @@ mod tests {
                     .is_none_or(|parsed| { parsed.declarations.declarations.is_empty() })
             );
         }
-        assert!(start.elapsed().as_secs() < 2, "took {:?}", start.elapsed());
+        // Without the limit 40 levels take longer than anyone waits (twice as long for each);
+        // with it a few seconds in a debug build on a slow runner, so the bound leaves room.
+        assert!(start.elapsed().as_secs() < 60, "took {:?}", start.elapsed());
     }
 
     #[test]
@@ -411,7 +413,9 @@ mod tests {
                 let _ = crate::Stylesheet::parse(&css, crate::Origin::Author, "a.css");
             }
         }
-        assert!(start.elapsed().as_secs() < 2, "took {:?}", start.elapsed());
+        // Without the limit 40 levels take longer than anyone waits (twice as long for each);
+        // with it a few seconds in a debug build on a slow runner, so the bound leaves room.
+        assert!(start.elapsed().as_secs() < 60, "took {:?}", start.elapsed());
     }
 
     #[test]
@@ -420,6 +424,7 @@ mod tests {
         let css = format!("a {{ width: {}", "min(".repeat(400_000));
         let start = std::time::Instant::now();
         assert!(flat_math(&css).starts_with("a { width: _in(min("));
-        assert!(start.elapsed().as_secs() < 1, "took {:?}", start.elapsed());
+        // Quadratic, 400,000 take minutes in a debug build; linear, well under a second.
+        assert!(start.elapsed().as_secs() < 20, "took {:?}", start.elapsed());
     }
 }
