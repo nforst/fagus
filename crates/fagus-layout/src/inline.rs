@@ -3878,14 +3878,7 @@ impl InnerBreaks {
         if !self.allows(&piece.style) {
             return Vec::new();
         }
-        // Spaces that hang at the end do not need a break before them; those of
-        // `break-spaces`, which take room, do.
-        let end = if piece.style.white_space.collapse == fagus_style::values::WhiteSpaceCollapse::BreakSpaces
-        {
-            text.len()
-        } else {
-            text.trim_end_matches(' ').len()
-        };
+        let end = before_hanging_spaces(piece);
         if self == Self::Phrase {
             return fagus_text::break_opportunities_with(text, crate::breaks::strictness(&piece.style))
                 .into_iter()
@@ -3905,6 +3898,20 @@ impl InnerBreaks {
             starts.retain(|start| letters.binary_search(start).is_ok());
         }
         starts
+    }
+}
+
+/// The byte offset in the text of `piece` where the spaces that hang at its end start: a line
+/// needs no break before them, as they hang at the end of the line before. Spaces of
+/// `break-spaces`, which take room, do not hang.
+fn before_hanging_spaces(piece: &Piece) -> usize {
+    let PieceKind::Text { text, .. } = &piece.kind else {
+        return 0;
+    };
+    if piece.style.white_space.collapse == fagus_style::values::WhiteSpaceCollapse::BreakSpaces {
+        text.len()
+    } else {
+        text.trim_end_matches(' ').len()
     }
 }
 
@@ -4552,11 +4559,16 @@ fn break_inside(
     let mut first = None;
     for index in run.clone() {
         let piece = &pieces[index];
-        // `overflow-wrap` breaks at any point, between pieces too.
+        // `overflow-wrap` breaks at any point, between pieces too, but not before a piece of
+        // nothing but spaces that hang: they stay at the end of the line before, which breaks
+        // after them, as in Chrome, instead of making a line of their own.
         let mut offsets = how.positions(piece);
+        let spaces = matches!(&piece.kind, PieceKind::Text { text, .. } if !text.is_empty())
+            && before_hanging_spaces(piece) == 0;
         if how == InnerBreaks::Overflow
             && index > run.start
             && matches!(piece.kind, PieceKind::Text { .. })
+            && !spaces
             && how.allows(&piece.style)
         {
             offsets.insert(0, 0);

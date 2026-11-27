@@ -3,7 +3,7 @@
 //! ideographic spaces before preserved ones, word spacing after the marks on a space; and the
 //! first line of a block whose content starts with a float, content that `align-content:
 //! unsafe` moves past the start of its box; inter-character justification around atomic
-//! inlines and ligatures.
+//! inlines and ligatures; the space between boxes that do not wrap where `overflow-wrap` breaks.
 
 use super::{find, lines, render, render_document};
 use crate::fragment::{Fragment, FragmentKind};
@@ -189,4 +189,93 @@ fn ends_a_line_at_a_hyphen_as_wide_as_the_hyphen_alone() {
             .map_or(f32::NAN, |run| run.1)
     };
     assert!((end(&kerned) - end(&plain)).abs() < 0.01, "{kerned:?} {plain:?}");
+}
+
+/// The lines of `content` in a box 60px wide with `style`, in standards mode (where a line of
+/// nothing but a space is as tall as any other): the top of each in the box and its text.
+fn nowrap_lines(style: &str, content: &str) -> Vec<(f32, String)> {
+    let (document, pages) = render_document(&format!(
+        "<!DOCTYPE html><style>@page {{ margin: 0 }} body {{ font: 12px/16px Inter; margin: 0 }}
+           .n {{ white-space: nowrap }}</style><div class=box style='width: 60px; {style}'>{content}</div>"
+    ));
+    let (_, _, block) = find(&pages[0], &document, "box").expect("box");
+    block
+        .children
+        .iter()
+        .map(|line| {
+            let text: String = runs(line).into_iter().map(|run| run.3).collect();
+            (line.rect.y.to_px(), text.trim().to_owned())
+        })
+        .collect()
+}
+
+#[test]
+fn hangs_the_space_between_boxes_that_do_not_wrap_where_overflow_wrap_breaks() {
+    // Issue #11: the first box is wider than the line, the space after it hangs at its end and
+    // the second box starts the next line, as in Chrome, also where `overflow-wrap` lets lines
+    // break anywhere: not before the space, which made a line of its own.
+    let two = "<span class=n>Oct 21, 2026,</span> <span class=n>02:05:00 PM</span>";
+    let expected = [
+        (0.0, "Oct 21, 2026,".to_owned()),
+        (16.0, "02:05:00 PM".to_owned()),
+    ];
+    for style in [
+        "",
+        "overflow-wrap: break-word",
+        "overflow-wrap: anywhere",
+        "word-break: break-word",
+        "word-break: break-all",
+        "overflow-wrap: break-word; white-space: pre-wrap",
+    ] {
+        assert_eq!(nowrap_lines(style, two), expected, "{style}");
+    }
+    // Two spaces, a space in a box of its own and a preserved one.
+    for content in [
+        "<span class=n>Oct 21, 2026,</span>  <span class=n>02:05:00 PM</span>",
+        "<span class=n>Oct 21, 2026,</span><span> </span><span class=n>02:05:00 PM</span>",
+        "<span class=n>Oct 21, 2026,</span><span style='white-space: pre-wrap'> </span><span class=n>02:05:00 PM</span>",
+    ] {
+        assert_eq!(
+            nowrap_lines("overflow-wrap: anywhere", content),
+            expected,
+            "{content}"
+        );
+    }
+    // Three boxes, one line each.
+    assert_eq!(
+        nowrap_lines(
+            "overflow-wrap: break-word",
+            &format!("{two} <span class=n>Nov 3</span>")
+        ),
+        [
+            (0.0, "Oct 21, 2026,".to_owned()),
+            (16.0, "02:05:00 PM".to_owned()),
+            (32.0, "Nov 3".to_owned())
+        ]
+    );
+    // A space of `break-spaces` takes room: the line breaks before it, and after it, as in Chrome.
+    assert_eq!(
+        nowrap_lines("overflow-wrap: break-word; white-space: break-spaces", two),
+        [
+            (0.0, "Oct 21, 2026,".to_owned()),
+            (16.0, String::new()),
+            (32.0, "02:05:00 PM".to_owned())
+        ]
+    );
+}
+
+#[test]
+fn keeps_rows_of_fixed_tables_as_tall_as_their_lines_where_overflow_wrap_breaks() {
+    // Issue #11: each row of two lines is 32px tall, as in Chrome, not 48px with a line for the
+    // space between the boxes that do not wrap.
+    let (document, pages) = render_document(
+        "<!DOCTYPE html><style>@page { margin: 0 } body { font: 12px/16px Inter; margin: 0 }
+           table { table-layout: fixed; width: 120px; border-collapse: collapse }
+           td { width: 60px; padding: 0; border: 1px solid; overflow-wrap: break-word }
+           .n { white-space: nowrap }</style>
+         <table class=t><tr><td><span class=n>Oct 21, 2026,</span> <span class=n>02:05:00 PM</span><td>x
+           <tr><td><span class=n>Oct 21, 2026,</span> <span class=n>02:05:00 PM</span><td>y</table>",
+    );
+    let (_, _, table) = find(&pages[0], &document, "t").expect("table");
+    assert_eq!(table.rect.height.to_px(), 67.0);
 }
