@@ -4,6 +4,7 @@ mod date;
 mod layout_json;
 mod memory;
 mod merge;
+mod merge_command;
 mod request;
 mod sandbox;
 mod worker;
@@ -795,7 +796,7 @@ fn main() -> Result<()> {
         } => {
             confinement.limit()?;
             let subcommand = matches.subcommand_matches("merge").expect("the merge command");
-            let selections = merge::selections(
+            let selections = merge_command::selections(
                 &subcommand
                     .indices_of("inputs")
                     .into_iter()
@@ -847,7 +848,7 @@ fn main() -> Result<()> {
                     .with_context(|| format!("writing {}", path.display())),
                 Err(error) => {
                     output.discard();
-                    Err(merge::named(error, &inputs))
+                    Err(merge_command::named(error, &inputs))
                 }
             }
         }
