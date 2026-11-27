@@ -313,6 +313,40 @@ fn puts_the_pages_of_pdfs_one_after_another() {
 }
 
 #[test]
+fn reads_a_pdf_added_more_than_once_once() {
+    // The same terms after each invoice: one PDF, shared, gives the PDF that copies of it give.
+    let terms = std::sync::Arc::new(render(pages("A4", &["AGB 1", "AGB 2"])));
+    let invoices: Vec<Vec<u8>> = (1..=3)
+        .map(|number| render(pages("A4", &[&format!("Rechnung {number}")])))
+        .collect();
+    let mut shared = Merge::new();
+    let mut copied = Merge::new();
+    for invoice in &invoices {
+        shared = shared
+            .add(invoice.clone())
+            .add_pages(std::sync::Arc::clone(&terms), "2".parse().expect("pages"));
+        copied = copied
+            .add(invoice.clone())
+            .add_pages(terms.to_vec(), "2".parse().expect("pages"));
+    }
+    let pdf = merged(&shared);
+    assert_eq!(pdf, merged(&copied));
+    if let Some(text) = text(&pdf) {
+        assert_eq!(
+            text,
+            [
+                "Rechnung 1",
+                "AGB 2",
+                "Rechnung 2",
+                "AGB 2",
+                "Rechnung 3",
+                "AGB 2"
+            ]
+        );
+    }
+}
+
+#[test]
 fn keeps_the_size_crop_box_and_rotation_of_pages() {
     let pdf = merged(&Merge::new().add(turned()).add(turned()));
     let original = boxes(&turned());

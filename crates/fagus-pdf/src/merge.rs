@@ -162,16 +162,33 @@ pub fn merge(inputs: &[MergeInput], metadata: &Metadata) -> Result<Merged, PdfEr
     if inputs.is_empty() {
         return Err(PdfError::NothingToMerge);
     }
-    let mut opened = Vec::with_capacity(inputs.len());
+    // Each PDF once, also where it is added more than once (the same terms after each invoice).
+    let mut sources: Vec<Source> = Vec::new();
+    let mut taken = Vec::with_capacity(inputs.len());
     let mut version = krilla::configure::PdfVersion::Pdf17;
     for (index, input) in inputs.iter().enumerate() {
         fagus_dom::budget::check_time_now();
-        fagus_dom::budget::charge(fagus_dom::budget::Kind::Resources, input.data.len() as u64);
-        let (pdf, pages) = open(index, input)?;
-        if pdf.version() > PdfVersion::Pdf17 {
-            version = krilla::configure::PdfVersion::Pdf20;
-        }
-        opened.push((Arc::new(pdf), pages));
+        let known = sources
+            .iter()
+            .position(|source| Arc::ptr_eq(&source.data, &input.data));
+        let source = if let Some(source) = known {
+            source
+        } else {
+            fagus_dom::budget::charge(fagus_dom::budget::Kind::Resources, input.data.len() as u64);
+            let pdf = Arc::new(open(index, &input.data)?);
+            if pdf.version() > PdfVersion::Pdf17 {
+                version = krilla::configure::PdfVersion::Pdf20;
+            }
+            sources.push(Source {
+                data: Arc::clone(&input.data),
+                document: krilla::pdf::PdfDocument::new(Arc::clone(&pdf)),
+                pdf,
+                checked: rustc_hash::FxHashSet::default(),
+            });
+            sources.len() - 1
+        };
+        let pages = sources[source].pages(index, input.pages.as_ref())?;
+        taken.push((source, pages));
     }
     let configuration = krilla::configure::ConfigurationBuilder::new()
         .with_version(version)
@@ -184,9 +201,9 @@ pub fn merge(inputs: &[MergeInput], metadata: &Metadata) -> Result<Merged, PdfEr
     };
     let mut document = krilla::Document::new_with(settings);
     let mut count = 0;
-    for (pdf, pages) in opened {
+    for (source, pages) in taken {
         count += pages.len();
-        document.embed_pdf_pages(&krilla::pdf::PdfDocument::new(pdf), &pages);
+        document.embed_pdf_pages(&sources[source].document, &pages);
     }
     let mut krilla_metadata = krilla::metadata::Metadata::new().producer("Fagus".to_owned());
     if let Some(title) = &metadata.title {
@@ -225,67 +242,82 @@ pub fn merge(inputs: &[MergeInput], metadata: &Metadata) -> Result<Merged, PdfEr
     Ok(Merged { pdf, pages: count })
 }
 
-/// The PDF of `input` (the `index`th), opened, and the pages to take of it, from 0, each checked
-/// as krilla will extract it.
-fn open(index: usize, input: &MergeInput) -> Result<(Pdf, Vec<usize>), PdfError> {
+/// A PDF to merge, opened once however often it is added.
+struct Source {
+    data: Arc<Vec<u8>>,
+    pdf: Arc<Pdf>,
+    document: krilla::pdf::PdfDocument,
+    /// The pages, from 0, checked so far.
+    checked: rustc_hash::FxHashSet<usize>,
+}
+
+impl Source {
+    /// The pages, from 0, of `pages` (all if `None`) for the `index`th input, each checked as
+    /// krilla will extract it.
+    fn pages(&mut self, index: usize, pages: Option<&PageRanges>) -> Result<Vec<usize>, PdfError> {
+        let count = self.pdf.pages().len();
+        let pages = pages
+            .map_or_else(|| Ok((0..count).collect()), |pages| pages.indices(count))
+            .map_err(|page| PdfError::NoPage {
+                input: index,
+                page,
+                pages: count,
+            })?;
+        let unreadable = |reason: String| PdfError::Unreadable { input: index, reason };
+        for &page in &pages {
+            if !self.checked.insert(page) {
+                continue;
+            }
+            fagus_dom::budget::check_time_now();
+            let content =
+                pdf_image::content_size(self.pdf.pages()[page].raw()).map_err(|error| match error {
+                    PdfImageError::TooLarge => unreadable(format!(
+                        "page {} holds more content than Fagus decodes (128 MiB)",
+                        page + 1
+                    )),
+                    _ => unreadable(format!("the content of page {} cannot be read", page + 1)),
+                })?;
+            // krilla decodes the content and compresses it again.
+            fagus_dom::budget::charge(fagus_dom::budget::Kind::Resources, content);
+            if !pdf_image::readable(&self.pdf, page, Extraction::Page)
+                || !pdf_image::complete(&self.pdf, page, Extraction::Page)
+            {
+                return Err(unreadable(format!(
+                    "page {} refers to objects that cannot be read or do not exist",
+                    page + 1
+                )));
+            }
+        }
+        Ok(pages)
+    }
+}
+
+/// The PDF `data` of the `index`th input, opened: one that needs no password and has pages.
+fn open(index: usize, data: &Arc<Vec<u8>>) -> Result<Pdf, PdfError> {
     let unreadable = |reason: &str| PdfError::Unreadable {
         input: index,
         reason: reason.to_owned(),
     };
-    if !pdf_image::is_pdf(&input.data) {
+    if !pdf_image::is_pdf(data) {
         return Err(unreadable("it is not a PDF file (it has no `%PDF-` header)"));
     }
-    let pdf = Pdf::new(Arc::clone(&input.data)).map_err(|error| match error {
+    let pdf = Pdf::new(Arc::clone(data)).map_err(|error| match error {
         LoadPdfError::Decryption(_) => PdfError::Encrypted { input: index },
         LoadPdfError::Invalid => unreadable("its structure cannot be read"),
     })?;
     // One that opens without a password but is encrypted all the same restricts what may be
     // done with it (its owner password lifts the restrictions); a merge would drop them.
-    if let Err(LoadPdfError::Decryption(_)) = Pdf::new_with_password(Arc::clone(&input.data), PROBE) {
+    if let Err(LoadPdfError::Decryption(_)) = Pdf::new_with_password(Arc::clone(data), PROBE) {
         return Err(PdfError::Encrypted { input: index });
     }
-    let count = pdf.pages().len();
-    if count == 0 {
+    if pdf.pages().is_empty() {
         return Err(unreadable("it has no pages"));
     }
     // hayro-syntax repairs a broken cross-reference table the first time it fails to read an
     // object through it, which changes what later reads find: reading every object once does
     // that now, so that the checks find what krilla finds (see `pdf_image::open`).
     for _ in pdf.objects() {}
-    let pages = input
-        .pages
-        .as_ref()
-        .map_or_else(|| Ok((0..count).collect()), |pages| pages.indices(count))
-        .map_err(|page| PdfError::NoPage {
-            input: index,
-            page,
-            pages: count,
-        })?;
-    let mut checked = rustc_hash::FxHashSet::default();
-    for &page in &pages {
-        if !checked.insert(page) {
-            continue;
-        }
-        fagus_dom::budget::check_time_now();
-        let content = pdf_image::content_size(pdf.pages()[page].raw()).map_err(|error| match error {
-            PdfImageError::TooLarge => unreadable(&format!(
-                "page {} holds more content than Fagus decodes (128 MiB)",
-                page + 1
-            )),
-            _ => unreadable(&format!("the content of page {} cannot be read", page + 1)),
-        })?;
-        // krilla decodes the content and compresses it again.
-        fagus_dom::budget::charge(fagus_dom::budget::Kind::Resources, content);
-        if !pdf_image::readable(&pdf, page, Extraction::Page)
-            || !pdf_image::complete(&pdf, page, Extraction::Page)
-        {
-            return Err(unreadable(&format!(
-                "page {} refers to objects that cannot be read or do not exist",
-                page + 1
-            )));
-        }
-    }
-    Ok((pdf, pages))
+    Ok(pdf)
 }
 
 #[cfg(test)]
