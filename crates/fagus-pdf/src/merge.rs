@@ -279,9 +279,7 @@ impl Source {
                 })?;
             // krilla decodes the content and compresses it again.
             fagus_dom::budget::charge(fagus_dom::budget::Kind::Resources, content);
-            if !pdf_image::readable(&self.pdf, page, Extraction::Page)
-                || !pdf_image::complete(&self.pdf, page, Extraction::Page)
-            {
+            if !pdf_image::extractable(&self.pdf, page, Extraction::Page) {
                 return Err(unreadable(format!(
                     "page {} refers to objects that cannot be read or do not exist",
                     page + 1

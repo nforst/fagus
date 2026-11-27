@@ -635,6 +635,13 @@ fn says_which_pdf_it_cannot_merge_and_why() {
         "{refused:?}"
     );
 
+    // An array whose items hayro-syntax cannot read, which it panics on (found by the fuzz
+    // target `merge`).
+    assert_eq!(
+        error(Merge::new().add(fixture("pdf/unreadable-array.pdf"))).to_string(),
+        "the PDF at index 0 cannot be read: page 1 refers to objects that cannot be read or do not exist"
+    );
+
     let missing = error(Merge::new().add_pages(good.clone(), "1,3".parse().expect("pages")));
     assert!(matches!(
         missing,
