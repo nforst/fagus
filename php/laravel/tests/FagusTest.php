@@ -7,9 +7,11 @@ namespace Fagus\Laravel\Tests;
 use DateTimeImmutable;
 use DateTimeZone;
 use Fagus\Engine;
+use Fagus\Exception\FagusException;
 use Fagus\Internal\Release;
 use Fagus\Laravel\Facades\Fagus;
 use Fagus\Laravel\PdfFactory;
+use Fagus\Laravel\PendingMerge;
 use Fagus\Laravel\PendingPdf;
 use Fagus\PageLayout;
 use Fagus\PageMode;
@@ -81,6 +83,38 @@ final class FagusTest extends TestCase
 
         Storage::disk('local')->assertExists('rechnungen/re-3.pdf');
         $this->assertSame($pdf->bytes(), Storage::disk('local')->get('rechnungen/re-3.pdf'));
+    }
+
+    #[Test]
+    public function it_merges_pdfs(): void
+    {
+        Storage::fake('local');
+        Fagus::html('<p>AGB</p>')->store('agb.pdf');
+        $invoice = Fagus::view('invoice', ['number' => 'RE-4', 'lines' => ['Beratung']]);
+
+        $merge = Fagus::merge([$invoice, $invoice->render()])
+            ->addFromDisk('agb.pdf')
+            ->add(Fagus::html('<p style="break-after: page">Eins</p><p>Zwei</p>'), pages: '2')
+            ->title('Sammeldruck')
+            ->name('sammeldruck.pdf');
+        $pdf = $merge->store('sammeldruck.pdf');
+        $this->assertSame(4, $pdf->pages());
+        $this->assertSame($pdf->bytes(), Storage::disk('local')->get('sammeldruck.pdf'));
+        $this->assertSame($pdf->bytes(), $merge->render()->bytes());
+
+        $download = $merge->download();
+        $this->assertSame('application/pdf', $download->headers->get('Content-Type'));
+        $this->assertSame('attachment; filename=sammeldruck.pdf', $download->headers->get('Content-Disposition'));
+        $this->assertSame($pdf->bytes(), $download->getContent());
+
+        Route::get('/sammeldruck', fn (): PendingMerge => $merge);
+        $response = $this->get('/sammeldruck');
+        $response->assertOk();
+        $response->assertHeader('Content-Disposition', 'inline; filename=sammeldruck.pdf');
+
+        $this->expectException(FagusException::class);
+        $this->expectExceptionMessage('The PDF file `fehlt.pdf` could not be read from the disk.');
+        Fagus::merge()->addFromDisk('fehlt.pdf');
     }
 
     #[Test]

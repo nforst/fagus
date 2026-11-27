@@ -6,6 +6,8 @@ namespace Fagus\Laravel;
 
 use Fagus\Document;
 use Fagus\Engine;
+use Fagus\Merge;
+use Fagus\Pdf;
 use Illuminate\Contracts\View\Factory as ViewFactory;
 
 /**
@@ -42,6 +44,22 @@ final readonly class PdfFactory
     public function view(string $view, array $data = [], array $mergeData = []): PendingPdf
     {
         return $this->html($this->views->make($view, $data, $mergeData)->render());
+    }
+
+    /**
+     * PDFs to merge into one, every page of each, one after another: PDF files as strings,
+     * rendered {@see Pdf}s, or {@see PendingPdf}s, which are rendered now.
+     *
+     * @param  iterable<Pdf|PendingPdf|string>  $pdfs
+     */
+    public function merge(iterable $pdfs = []): PendingMerge
+    {
+        $merge = new PendingMerge($this->engine, Merge::of());
+        foreach ($pdfs as $pdf) {
+            $merge = $merge->add($pdf);
+        }
+
+        return $merge;
     }
 
     public function engine(): Engine
