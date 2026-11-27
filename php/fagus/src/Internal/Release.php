@@ -13,7 +13,7 @@ namespace Fagus\Internal;
 final class Release
 {
     /** The version of the binary. */
-    public const string VERSION = '1.2.0';
+    public const string VERSION = '1.2.1';
 
     /** The GitHub repository whose releases hold the binaries. */
     public const string REPOSITORY = 'nforst/fagus';
@@ -25,13 +25,13 @@ final class Release
      * @var array<string, string>
      */
     public const array BINARIES = [
-        'aarch64-apple-darwin' => '0e08571b4f3db5fc5bb13109ec8c22fe0c4e721f3a6b8f4a7bdd5b82aab24bdb',
-        'aarch64-unknown-linux-gnu' => '64877d1fb1fbe9b548a0ee51140fb1558be7066851634977ba0a9eea60d07916',
-        'aarch64-unknown-linux-musl' => '5698a987536cde82e608f0ebbd86ce191767c48002ca8b3afacbc3c74fab164f',
-        'x86_64-apple-darwin' => '3da81a18c273e13b3cd0b7ae04b39bcc5e1b023eb668ca9611c63c468a347bd6',
-        'x86_64-pc-windows-msvc' => '1dcf9a048329e262bd6cfdda33e40e9d561924c9e68097a4ca35f0e4576c5f62',
-        'x86_64-unknown-freebsd' => '559910af066baffef0723c9ed0974ac392730f5a8e6c3f82a92a7843cce195fd',
-        'x86_64-unknown-linux-gnu' => 'e9d628f41dd3ef32a22e094e61c78668cdcbe8c18051627ed5639a2a010168ff',
-        'x86_64-unknown-linux-musl' => '5293e68a4f6ed39c2ff48c363ed3f5478d0d8de719ef3f3483c8fa848b6dbd10',
+        'aarch64-apple-darwin' => '4069f2dadfeef39abf9443b7c40826a993c574154e0ea8eae8a74a9345200978',
+        'aarch64-unknown-linux-gnu' => '98d399d005de9400107e1d3fad2474dfabc4a5c33367f1de62ad2eb820c3fa5a',
+        'aarch64-unknown-linux-musl' => 'd40f3e59f8bc49ded643cdee7a83b5156e1a8065a3121f8c52bfd144a9e76551',
+        'x86_64-apple-darwin' => '8ec2b281099924547551bc1954cb83bf2e42012d8ab1f0fcf593b93155c95acc',
+        'x86_64-pc-windows-msvc' => '9d7f47e956fed2bc4fc54379ee421b854eb2b32977661fdf3fb6427ad925a371',
+        'x86_64-unknown-freebsd' => 'f40f5313073a98da988e7c1af47e7fdec79ba8823c62b59d3b8a61f4e2ae3d1a',
+        'x86_64-unknown-linux-gnu' => '3ab8aaffd385f4a492cc196e97171aab6bcdec0d9ad3a546b50b6de20981f6d4',
+        'x86_64-unknown-linux-musl' => '0b7c5484dfd35a0dbb21c0da29dfe47b5b1ffd1e65768a4f287585dff8a6b619',
     ];
 }
