@@ -26,6 +26,13 @@ done < "$root/tools/wpt/dirs.txt"
 directories+=(common css/reference css/support css/CSS2/reference css/CSS2/support css/CSS2/positioning
   fonts images quirks/reference resources)
 
+mkdir -p "$checkout"
+checkout=$(cd "$checkout" && pwd)
+# git must never take this repository for the checkout: where the checkout's .git is broken
+# (as a cache of target/ can bring one back), git would look further up, find this repository
+# and make it the sparse checkout, which takes crates/ out of the working tree.
+export GIT_CEILING_DIRECTORIES=${checkout%/*}
+
 # A new, empty checkout.
 fresh() {
   rm -rf "$checkout"
@@ -34,7 +41,10 @@ fresh() {
   git -C "$checkout" remote add origin "$WPT_REPOSITORY"
 }
 
-[[ -d $checkout/.git ]] || fresh
+if [[ $(git -C "$checkout" rev-parse --show-toplevel 2> /dev/null) != "$checkout" ]] \
+  || [[ $(git -C "$checkout" remote get-url origin 2> /dev/null) != "$WPT_REPOSITORY" ]]; then
+  fresh
+fi
 for attempt in 1 2 3; do
   git -C "$checkout" sparse-checkout set --cone "${directories[@]}"
   if [[ $(git -C "$checkout" rev-parse -q --verify HEAD 2> /dev/null) == "$WPT_COMMIT" ]]; then
@@ -46,8 +56,6 @@ for attempt in 1 2 3; do
     break
   fi
   [[ $attempt != 3 ]] || exit 1
-  # A checkout left from before (such as one a cache of target/ brought back) can make GitHub
-  # refuse the fetch ("not our ref"); a new one fetches, and GitHub refuses one now and then.
   echo "fetching web-platform-tests failed; again from a new checkout in $((attempt * 20)) seconds" >&2
   sleep $((attempt * 20))
   fresh
