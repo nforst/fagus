@@ -5,6 +5,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-11-27
+
 ### Fixed
 
 - A render that ended while a page was being drawn, because the document ran out of its memory budget or time, or because a dependency panicked, aborted the whole process (the CLI, the worker or a program with the engine) instead of ending with an error: krilla checks, when a page's drawing surface is dropped, that everything pushed onto it was popped, and that second panic during the first one cannot be caught. Fagus now leaves such a surface undropped, so the render ends with `MemoryBudget`, `TimeLimit` or an internal error as it should. Found by the fuzz target `avif`.
@@ -208,7 +210,8 @@ The first release: a native engine that turns HTML and CSS into PDF the way Chro
 - No network access and no scripts: resources come only from `data:` URLs, the caller and files inside the document's root directory.
 - Limits on nesting, grids, frames, images and the size of substituted values, so that hostile documents render in bounded time and memory, and a panic becomes an error instead of ending the caller. The engine has no `unsafe` code of its own.
 
-[Unreleased]: https://github.com/nforst/fagus/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/nforst/fagus/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/nforst/fagus/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/nforst/fagus/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/nforst/fagus/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/nforst/fagus/compare/v1.0.0...v1.1.0
