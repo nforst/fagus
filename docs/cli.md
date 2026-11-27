@@ -1,7 +1,7 @@
 # Command line
 
-The `fagus` binary renders HTML files to PDF on the command line. It is the same binary the PHP
-package runs as its worker, so it renders exactly as the PHP package does. Use it to try a
+The `fagus` binary renders HTML files to PDF on the command line, and merges PDF files. It is the
+same binary the PHP package runs as its worker, so it renders exactly as the PHP package does. Use it to try a
 template, in shell scripts and build jobs, or from languages other than PHP.
 
 ```sh
@@ -148,6 +148,48 @@ always extract the text. Passwords are prepared with SASLprep, as PDF 2.0 requir
 [pdf.md](pdf.md#protect-the-pdf-with-a-password)); one with a control character fails with exit
 code 1.
 
+## Merge PDF files
+
+```sh
+fagus merge <PDF> [--pages <PAGES>] [<PDF> [--pages <PAGES>]]... --output <OUTPUT> [OPTIONS]
+```
+
+`fagus merge` writes the pages of the PDF files, one file after another, into a new PDF (see
+[pdf.md](pdf.md#merge-pdfs) for what the merged PDF keeps and what it leaves out). `--pages` after
+a file takes only those pages of it, counted from 1 and in the order given: `2`, `1-3`, `4-` (page
+4 to the last) or a list such as `1-3,5,8-`. A file without `--pages` gives every page. The pages
+are an option of their own rather than a part of the file name, so paths with colons, such as
+`C:\Belege\agb.pdf` on Windows, stay as they are.
+
+```sh
+# every page of three invoices
+fagus merge 2026-0041.pdf 2026-0042.pdf 2026-0043.pdf -o batch.pdf
+
+# an invoice with the first two pages of the terms, and their last page again at the end
+fagus merge invoice.pdf terms.pdf --pages 1-2 appendix.pdf terms.pdf --pages 4- -o out.pdf
+```
+
+| Option | Default | Description |
+|---|---|---|
+| `-o`, `--output <FILE>` | required | The PDF file to write |
+| `--pages <PAGES>` | every page | The pages of the file before it, such as `1-3,5,8-`; once for each file |
+| `--title <TITLE>` | none | The title of the merged PDF |
+| `--author <NAME>` | none | An author of the merged PDF; repeatable |
+| `--language <TAG>` | none | The language of the merged PDF, e.g. `de-DE` |
+| `--created <DATE>` | none | The creation date written into the PDF, as for `render`; without it the PDF has none, and the same files give the same bytes |
+| `--memory-budget <MIB>` | `2048` | The [memory budget](#limits) of the merge; the files and the content of their pages decoded count against it |
+| `--time-limit <SECONDS>` | none | The [time limit](#limits) of the merge |
+| `--no-sandbox`, `--memory-limit`, `--cpu-limit` | | As for `render`; in the [sandbox](#sandbox) the files are read before it starts, so it reads none |
+
+A file that cannot be merged ends the command with exit code 1 and names the file: it is no PDF
+or damaged beyond repair, it is encrypted, or `--pages` names a page it does not have. Nothing is
+written then.
+
+```text
+$ fagus merge invoice.pdf terms.pdf --pages 5 -o out.pdf
+Error: terms.pdf has 4 pages, not page 5
+```
+
 ## Read and write
 
 The input is a file path; `fagus render` does not read from standard input. Write the HTML to a
@@ -177,8 +219,11 @@ before are printed too, ahead of the error.
 | Code | Meaning |
 |---|---|
 | `0` | The PDF was written, or help or the version was printed |
-| `1` | Rendering failed: the input or a font directory could not be read, the document was refused (PDF/A, PDF/UA), it exceeded its memory budget or time limit, `--strict` found diagnostics, `--created` is not a date, the PKCS#12 file or its password is wrong, or the PDF could not be written or signed. The reason goes to standard error, after `Error:` |
+| `1` | Rendering or merging failed: the input or a font directory could not be read, a PDF to merge could not be merged, the document was refused (PDF/A, PDF/UA), it exceeded its memory budget or time limit, `--strict` found diagnostics, `--created` is not a date, the PKCS#12 file or its password is wrong, or the PDF could not be written or signed. The reason goes to standard error, after `Error:` |
 | `2` | The command line is wrong: an unknown option, a missing `--output` or input, a value that is not allowed (`--pdfa 5b`) |
+
+`fagus merge` also fails with exit code 1 for `--pages` that are no pages (`--pages 0`), that come
+before the first file, or that are given twice for one file.
 
 ```text
 $ fagus render letter.html -o letter.pdf --accessible
@@ -255,8 +300,8 @@ RAYON_NUM_THREADS=1 fagus render invoice.html -o invoice.pdf
 fagus worker [OPTIONS]
 ```
 
-`fagus worker` renders documents for another program: it reads requests from standard input and
-writes PDFs to standard output, in the binary frames of [protocol.md](protocol.md), until its
+`fagus worker` renders documents, and merges PDFs, for another program: it reads requests from
+standard input and writes PDFs to standard output, in the binary frames of [protocol.md](protocol.md), until its
 input closes. The PHP package starts it and talks to it; it is not meant to be used by hand. Write
 a client of your own only to use Fagus from another language.
 

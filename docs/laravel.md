@@ -21,13 +21,14 @@ Installation is described in [getting-started.md](getting-started.md).
 ## The facade
 
 `Fagus\Laravel\Facades\Fagus` (also registered as the alias `Fagus`) resolves the service
-`fagus`, an instance of `Fagus\Laravel\PdfFactory`. It has four methods:
+`fagus`, an instance of `Fagus\Laravel\PdfFactory`. It has five methods:
 
 | Method | Returns |
 |---|---|
 | `Fagus::view(string $view, array $data = [], array $mergeData = [])` | A `PendingPdf` from a Blade view, rendered with `view()->make($view, $data, $mergeData)`. |
 | `Fagus::html(string $html)` | A `PendingPdf` from HTML. |
 | `Fagus::xhtml(string $xml)` | A `PendingPdf` from XHTML, parsed as XML (see [php.md](php.md#fagus)). |
+| `Fagus::merge(iterable $pdfs = [])` | A `PendingMerge` of finished PDFs: PDF bytes, rendered `Pdf`s or `PendingPdf`s (see [Merge PDFs](#merge-pdfs)). |
 | `Fagus::engine()` | The application's `Fagus\Engine`, for `addFont()` and `version()`. |
 
 Every `PendingPdf` starts with the base directory, the root and the tagging of the
@@ -205,6 +206,49 @@ Storage::put("invoices/{$invoice->number}.pdf", $pdf->bytes());
 ### `document(): Document`
 
 The underlying `Fagus\Document`, for code that works with the plain PHP API.
+
+## Merge PDFs
+
+`Fagus::merge()` puts the pages of finished PDFs one after another into one PDF, for a batch to
+print, a dunning run or an invoice with its terms. It takes PDF bytes, rendered `Pdf`s and
+`PendingPdf`s, which it renders as they are added, and returns a `PendingMerge`, which a
+controller can return as it returns a `PendingPdf`:
+
+```php
+use Fagus\Laravel\Facades\Fagus;
+
+// In a controller: the invoices of a month, each followed by the terms.
+$merge = Fagus::merge()->title('Invoices November 2026')->name('invoices-2026-11.pdf');
+foreach ($invoices as $invoice) {
+    $merge = $merge
+        ->add(Fagus::view('invoices.show', ['invoice' => $invoice]))
+        ->addFromDisk('legal/terms.pdf', 's3', pages: '1-2');
+}
+
+return $merge;   // shown in the browser; ->download() as a download
+```
+
+`PendingMerge` has the methods of [`Merge`](php.md#merge) (`add()`, `addFile()`, `title()`,
+`author()`, `language()`, `created()`), each returning a changed copy, and:
+
+| Method | Does |
+|---|---|
+| `add(Pdf\|PendingPdf\|string $pdf, int\|string\|null $pages = null)` | Adds a PDF; a `PendingPdf` is rendered now. `$pages` takes only those pages, such as `'1-3,5,8-'`. |
+| `addFromDisk(string $path, ?string $disk = null, int\|string\|null $pages = null)` | Adds the PDF file at `$path` on a filesystem disk, read now. Throws a `FagusException` if the disk has no such file. |
+| `name(string $filename)` | The file name for `inline()`, `download()` and controllers. |
+| `inline(?string $filename = null): Response` | A response that shows the PDF in the browser. |
+| `download(?string $filename = null): Response` | A response that downloads the PDF. |
+| `toResponse($request): Response` | The same as `inline()`, so a controller can return the merge. |
+| `store(string $path, ?string $disk = null): Pdf` | Merges and stores the PDF on a disk. |
+| `save(string $path): Pdf` | Merges and writes the PDF to a file. |
+| `render(): Pdf` | Merges and returns the `Pdf`. |
+| `merge(): Merge` | The underlying `Fagus\Merge`. |
+
+The same PDF added again (the same terms after each invoice) goes to the worker once. The merged
+PDF keeps what each page shows, but not the links, form fields, signatures, tags, attachments
+(the invoice XML of Factur-X) or PDF/A of the PDFs ([pdf.md](pdf.md#merge-pdfs)): merge for
+printing and sending, and archive the PDFs themselves. A PDF that cannot be merged throws a
+`RenderException` that names its index; a binary older than 1.2.0 an `EngineException`.
 
 ## Put a Blade partial in the header and footer
 

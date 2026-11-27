@@ -1,6 +1,6 @@
 # Worker protocol
 
-`fagus worker` renders documents for a caller over standard input and output. One process serves
+`fagus worker` renders documents, and merges PDFs, for a caller over standard input and output. One process serves
 any number of documents one after another, with fonts loaded and caches warm, so a document costs
 the time it takes to render it and nothing more. The PHP package uses this protocol; any other
 language can too.
@@ -28,6 +28,7 @@ ends the worker with exit code 1 and the reason on its error output.
 |---|---|---|---|
 | `H` hello | worker → caller | `protocol`, `version`, `sandbox` | – |
 | `R` render | caller → worker | the document, see below | HTML, stylesheets, resources, attachments, invoice XML |
+| `M` merge | caller → worker | the PDFs and their pages, see [Merging](#merging) | the PDFs |
 | `?` ask | worker → caller | `id`, `url` | – |
 | `r` resource | caller → worker | `found` | the resource, if found |
 | `Q` ask for many | worker → caller | `id`, `urls` | – |
@@ -345,6 +346,52 @@ A request with both `signature` and `encryption` signs the encrypted PDF. `signa
 `T` and `t` were added in 1.0.0: an older worker ignores `signature` and writes the PDF unsigned,
 which the caller notices by the missing `signed` in `P`.
 
+### Merging
+
+The caller sends `M` to merge PDFs into one, the pages of each after those of the one before (see
+[pdf.md](pdf.md#merge-pdfs) for what the merged PDF keeps and what it leaves out). The worker
+answers with `P` or `E`, as for `R`, and asks nothing in between. The header of `M`; fields other
+than `id` and `inputs` may be left out:
+
+```json
+{
+  "id": 2,
+  "inputs": [{ "blob": 0 }, { "blob": 1, "pages": "1-2" }, { "blob": 0, "pages": "3-" }],
+  "title": "Invoice 2026-0042",
+  "authors": ["Accounting"],
+  "language": "de-DE",
+  "created": "2026-11-02T12:00:00Z",
+  "memoryBudget": 1073741824,
+  "timeLimit": 54000,
+  "blobs": [48213, 20431]
+}
+```
+
+- `inputs`: the PDFs in order, each the index of a data block and the `pages` to take of it
+  (every page if left out or `null`): page numbers from 1 and ranges of them, separated by
+  commas, such as `2`, `1-3`, `4-` (to the last page) or `1-3,5,8-`, in that order. A data block
+  may be named more than once and is read once.
+- `title`, `authors`, `language`: the metadata of the merged PDF; nothing is taken from the PDFs.
+- `created`: the creation date, as for `R`. Unlike for `R`, a merged PDF without it has none, and
+  the same PDFs give the same bytes.
+- `memoryBudget`, `timeLimit`: as for `R`; the PDFs, and the content of their pages decoded,
+  count against the budget.
+
+The header of `P` has `id`, `pages` (of the merged PDF), an empty `diagnostics`, `timings` with
+only `pdf`, `encrypted`, `signed` and `forms` (all `false`), `rss` and `maxRss`. `E` has `id`,
+`message` and `diagnostics`, which is empty but for `limit.memory` or `limit.time`. The message
+names a PDF by its index in `inputs`, from 0: ``the PDF at index 1 cannot be read: it is not a PDF
+file (it has no `%PDF-` header)``, `the PDF at index 0 is encrypted; only PDFs without encryption
+can be merged`, `the PDF at index 2 has 3 pages, not page 5`. `there are no PDF files to merge`,
+``invalid pages `0`: pages count from 1``, a missing data block and an invalid date are answered
+with `E` as well.
+
+`M` was added in 1.2.0. A worker of an older release answers it as a message of an unknown type,
+with an `E` without `id`, and goes on with the next request. A caller should therefore look at
+the `version` of `H` before it sends `M`, and take an `E` without `id` as the answer of a worker
+that cannot merge. The PHP package refuses to merge with a binary older than 1.2.0 with an
+`EngineException`, before it sends anything.
+
 ### Fonts
 
 `F` adds a font to the worker for all later documents; the worker answers with `K` and the number
@@ -378,8 +425,8 @@ that names the binary, both versions and how to install the binary of the packag
 binary of another release with the same protocol renders, and the engine warns once per process,
 through its `onWarning` callback or to PHP's error log ([PHP API](php.md#constructor)).
 
-The fields that came after protocol 1 began, with the release that added them; a binary older
-than that ignores them:
+The fields and messages that came after protocol 1 began, with the release that added them; a
+binary older than that ignores the fields and answers the messages with an `E` without `id`:
 
 | Field | Message | Since |
 |---|---|---|
@@ -397,3 +444,4 @@ than that ignores them:
 | `askMany`; the messages `Q`, `q` | `R` | 1.2.0 |
 | `imageQuality` | `R` | 1.2.0 |
 | `view` | `R` | 1.2.0 |
+| the message `M` (merge), answered with `P` or `E` | `M` | 1.2.0 |

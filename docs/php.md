@@ -1,10 +1,11 @@
 # PHP API
 
-The PHP API lives in the namespace `Fagus\` (`php/fagus/src`). It has four parts:
+The PHP API lives in the namespace `Fagus\` (`php/fagus/src`). It has five parts:
 
 - `Fagus`: static entry points and the shared engine.
 - `Document`: a document to render, built step by step.
-- `Pdf`: the rendered PDF with its page count, diagnostics and timings.
+- `Merge`: finished PDFs to merge into one.
+- `Pdf`: the rendered or merged PDF with its page count, diagnostics and timings.
 - `Engine`: the `fagus` binary, running as a worker process.
 
 In Laravel, use the facade described in [laravel.md](laravel.md); it offers the same document
@@ -57,6 +58,15 @@ added, no tags closed for you). Same as `Document::xhtml()`.
 ```php
 Fagus::xhtml('<html xmlns="http://www.w3.org/1999/xhtml"><body><p>Invoice</p><div/></body></html>')
     ->save('invoice.pdf');
+```
+
+### `Fagus::merge(iterable $pdfs = []): Merge`
+
+Starts a merge of finished PDFs, every page of each, one after another: PDF files as strings or
+rendered `Pdf`s. Same as `Merge::of()`; see [`Merge`](#merge).
+
+```php
+Fagus::merge([$invoice, file_get_contents('terms.pdf')])->save('invoice-with-terms.pdf');
 ```
 
 ### `Fagus::engine(): Engine`
@@ -487,9 +497,55 @@ come from the document:
 | Keywords | `<meta name="keywords" content="…">`, separated by commas |
 | Outline (bookmarks) | the headings (`bookmark-level`, `bookmark-label`, `bookmark-state`) |
 
+## `Merge`
+
+`Fagus\Merge` puts the pages of finished PDFs one after another into a new PDF, in the worker, as
+documents render. Like `Document`, it is immutable: every method returns a changed copy. What the
+merged PDF keeps of the pages and what it leaves out (links, form fields, signatures, tags,
+attachments, PDF/A) is described in [pdf.md](pdf.md#merge-pdfs).
+
+```php
+use Fagus\Fagus;
+
+$batch = Fagus::merge($invoices)            // rendered Pdfs or PDF bytes, every page of each
+    ->addFile('/srv/pdf/terms.pdf', pages: '1-2')
+    ->title('Invoices November 2026')
+    ->save('batch.pdf');
+```
+
+| Method | Does |
+|---|---|
+| `Merge::of(iterable $pdfs = []): Merge` | A merge of the PDFs `$pdfs` (strings or `Pdf`s), every page of each. |
+| `add(Pdf\|string $pdf, int\|string\|null $pages = null): Merge` | Adds a PDF: the data of a PDF file or a rendered `Pdf`, never a path. `$pages` takes only those pages, counted from 1 and in that order: `2`, `'1-3'`, `'4-'` (to the last page) or `'1-3,5,8-'`. |
+| `addFile(string $path, int\|string\|null $pages = null): Merge` | Adds the PDF file at `$path`, read now. Throws a `FagusException` ("The PDF file `…` could not be read.") if it cannot be read. |
+| `title(?string $title): Merge` | The title of the merged PDF, which viewers show in place of the file name. |
+| `author(string ...$authors): Merge` | The authors of the merged PDF. |
+| `language(?string $language): Merge` | The language of the merged PDF, such as `'de-DE'`. |
+| `created(DateTimeInterface $date): Merge` | The creation date of the merged PDF. Without one it has none, and the same PDFs give the same bytes. |
+| `count(): int` | How many PDFs are added. |
+| `render(?Engine $engine = null): Pdf` | Merges the PDFs with `$engine` or `Fagus::engine()`. |
+| `save(string $path, ?Engine $engine = null): Pdf` | Merges and writes the PDF to `$path`. |
+| `inline(string $filename = 'document.pdf', ?Engine $engine = null): Pdf` | Merges and sends the PDF to the browser to show it, as `Pdf::inline()`. |
+| `download(string $filename = 'document.pdf', ?Engine $engine = null): Pdf` | Merges and sends the PDF as a download, as `Pdf::download()`. |
+
+The `Pdf` of a merge has its `bytes()` and `pages()`, no diagnostics, and `timings()` with only
+`pdf`. A PDF added more than once (the same terms after each invoice) goes to the worker once.
+
+`add()` with `$pages` that are no page numbers (`0`, `'3-1'`, `'last'`) and `render()` without PDFs
+throw an `InvalidArgumentException` at once. A PDF that cannot be merged throws a
+`RenderException` that names it by its index among those added, from 0: one that is not a PDF or
+is damaged, one that is encrypted, or `$pages` that name a page it does not have
+([pdf.md](pdf.md#when-a-pdf-cannot-be-merged)). The engine's [limits](#limits) apply to a merge as
+to a document.
+
+Merging needs a binary of 1.2.0 or later. With an older one, `render()` throws an
+`EngineException` before it sends anything: "The fagus binary `…` (version 1.1.1) cannot merge
+PDFs, which needs version 1.2.0 or later." The worker goes on rendering documents.
+
 ## `Pdf`
 
-`Fagus\Pdf` is a final readonly class: a rendered PDF with what Fagus noticed while rendering it.
+`Fagus\Pdf` is a final readonly class: a rendered (or [merged](#merge)) PDF with what Fagus
+noticed while rendering it.
 
 | Method | Returns |
 |---|---|
@@ -671,11 +727,16 @@ new Engine(memoryBudget: 1024, timeLimit: 20.0);   // in Laravel: memory_budget 
 ```
 
 The constructor does not start the worker. The worker starts with the first call that needs it
-(`render()`, `addFont()`, `version()`).
+(`render()`, `merge()`, `addFont()`, `version()`).
 
 ### `render(Document $document): Pdf`
 
 Renders a document. `$document->render($engine)` calls this.
+
+### `merge(Merge $merge): Pdf`
+
+Merges PDFs ([`Merge`](#merge)). `$merge->render($engine)` calls this. Throws an
+`EngineException` for a binary older than 1.2.0, which cannot merge.
 
 ### `addFont(string $data): int`
 
@@ -923,10 +984,10 @@ try {
 
 | Exception | Thrown when |
 |---|---|
-| `FagusException` | Base class. Thrown itself by `Pdf::save()` when the file cannot be written. |
-| `RenderException` | The document cannot be rendered (for example PDF/UA requirements that are not met), or has diagnostics in strict mode. `diagnostics(): list<Diagnostic>` returns the diagnostics strict mode refused, or those found before rendering failed (CSS that was ignored, resources that are missing), which often explain the failure. |
-| `EngineException` | The binary was not found or could not be started, a font directory does not exist, the worker did not answer within the timeout, it stopped, it speaks another protocol, it cannot encrypt (a binary older than `encrypt()`, which would have written the PDF without a password), or a font passed to `addFont()` cannot be read. When the worker has exited, the message ends with its exit code and what it wrote to its error output. |
-| `InvalidArgumentException` | A value Fagus does not know, such as a PDF/A level passed to `pdfA()` as a string that is not one, or `encrypt()` without a password. |
+| `FagusException` | Base class. Thrown itself by `Pdf::save()` when the file cannot be written, and by `Merge::addFile()` when the file cannot be read. |
+| `RenderException` | The document cannot be rendered (for example PDF/UA requirements that are not met), or has diagnostics in strict mode; or PDFs cannot be merged (one cannot be read, is encrypted, or lacks a page to take). `diagnostics(): list<Diagnostic>` returns the diagnostics strict mode refused, or those found before rendering failed (CSS that was ignored, resources that are missing), which often explain the failure. |
+| `EngineException` | The binary was not found or could not be started, a font directory does not exist, the worker did not answer within the timeout, it stopped, it speaks another protocol, it cannot encrypt (a binary older than `encrypt()`, which would have written the PDF without a password) or merge (a binary older than 1.2.0), or a font passed to `addFont()` cannot be read. When the worker has exited, the message ends with its exit code and what it wrote to its error output. |
+| `InvalidArgumentException` | A value Fagus does not know, such as a PDF/A level passed to `pdfA()` as a string that is not one, `encrypt()` without a password, pages to merge that are no page numbers, or a merge without PDFs. |
 | `InstallException` | The binary could not be installed: a development version without binaries, an unsupported platform, a failed download, a checksum mismatch, or a directory that cannot be written. Thrown by `Installer`, `vendor/bin/fagus-install` and `php artisan fagus:install`; the Composer plugin turns it into a warning, or into an error with `FAGUS_INSTALL_STRICT` ([deployment.md](deployment.md#fail-the-build-without-the-binary)). |
 
 The exact messages are listed in [troubleshooting.md](troubleshooting.md).

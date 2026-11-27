@@ -2,7 +2,8 @@
 
 This page describes the PDF file Fagus writes and the options that change it: metadata, links and
 bookmarks, fill-in forms, tagged and accessible PDF, PDF/A, attachments, electronic invoices,
-passwords, digital signatures and the compression of images. How the pages look is up to the HTML and CSS (see
+passwords, digital signatures and the compression of images, and how to merge finished PDFs into
+one. How the pages look is up to the HTML and CSS (see
 [css.md](css.md) and [paged-media.md](paged-media.md)); the methods of the document builder are
 described in [php.md](php.md).
 
@@ -1248,6 +1249,95 @@ pyhanko sign validate --pretty-print --trust root.pem --password=… encrypted.p
 For B-LT and B-LTA, pyHanko's `validate_pdf_ltv_signature()` checks the signature with the
 validation data in the file alone.
 
+## Merge PDFs
+
+`Fagus::merge()` puts the pages of finished PDFs one after another into a new PDF: the invoices of
+a batch for printing, the letters of a dunning run, an invoice with its terms. The PDFs can come
+from Fagus or from any other program. The fagus binary merges them in the worker, as it renders,
+so no other library is needed.
+
+```php
+use Fagus\Fagus;
+
+// Every page of each PDF: rendered Pdf objects or the bytes of PDF files.
+Fagus::merge([$invoice1, $invoice2, $invoice3])->save('batch.pdf');
+
+Fagus::merge()
+    ->add($invoice)                                  // a Pdf from render(), or PDF bytes
+    ->addFile('storage/terms.pdf', pages: '1-2')     // a file, read now
+    ->title('Invoice 2026-0042')
+    ->save('invoice-with-terms.pdf');
+```
+
+`add()` takes the data of a PDF, never a path, and `addFile()` a path, so that a file name is never
+taken for the content of a file or the other way round. Both take the pages to use, counted from 1
+and in the order given:
+
+| `pages` | Pages taken |
+|---|---|
+| `null` | every page |
+| `2` or `'2'` | page 2 |
+| `'1-3'` | pages 1, 2 and 3 |
+| `'4-'` | page 4 to the last page |
+| `'1-3,5,8-'` | pages 1 to 3, 5, and 8 to the last |
+| `'2,1'` | page 2, then page 1 |
+
+A page may be taken more than once, and the same PDF may be added more than once, such as the same
+terms after each invoice: it is sent to the worker and read once. `title()`, `author()`,
+`language()` and `created()` set the metadata of the merged PDF; nothing is taken from the PDFs
+merged. The result is a `Pdf`, as from `render()`, with `bytes()`, `pages()`, `save()`,
+`inline()` and `download()`. In Laravel, `Fagus::merge()` also takes `PendingPdf`s and returns a
+`PendingMerge` with responses and storage ([laravel.md](laravel.md#merge-pdfs)); on the command
+line, `fagus merge` merges files ([cli.md](cli.md#merge-pdf-files)).
+
+### What a merged PDF keeps and what it leaves out
+
+Each page is taken over as it is: its content, with the text still text that can be searched and
+copied, its fonts and images, its size (portrait, landscape and mixed sizes stay as they are), its
+crop box and its rotation (`/Rotate`). The merged PDF is PDF 1.7, or PDF 2.0 if one of the PDFs is
+(PDF/A-4 is).
+
+Left out is everything that is not the drawn content of a page:
+
+- **Links, form fields, comments and other annotations.** The areas of links no longer link, and a
+  filled-in form field no longer shows its value, which viewers draw from the field.
+- **Signatures.** The merged PDF is not signed, and a visible signature no longer shows: it is an
+  annotation too. Sign the merged PDF again if it must be signed.
+- **Tags.** The merged PDF is not tagged, and so not PDF/UA, even if every PDF was.
+- **PDF/A.** The merged PDF is neither PDF/A nor PDF/UA. Merging is for printing and sending a
+  batch, not for archiving: archive the PDFs themselves.
+- **Attachments**, also the invoice XML of a ZUGFeRD or Factur-X invoice. The merged PDF is no
+  electronic invoice; send each invoice PDF on its own where the XML matters.
+- **The outline (bookmarks), named destinations and page labels.**
+- **Layers** ([extensions.md](extensions.md#layers-that-show-on-screen-or-in-print)): their content
+  shows everywhere, so a stamp only for print shows on screen too, and a note only for the screen
+  is printed.
+- **The metadata of the PDFs** (title, author, XMP) and how they open (`initialView()`).
+- **The trim and bleed boxes** of pages and their `/UserUnit`.
+
+Encrypted PDFs cannot be merged, neither those that need a password to open nor those that open
+without one but restrict what may be done with them: a merge would drop the restrictions. Merging
+is no editing tool either: it takes pages as they are and does not split, turn, crop, stamp or
+redact them.
+
+### When a PDF cannot be merged
+
+`render()` throws a `RenderException` that names the PDF by its index among those added, from 0,
+and says why:
+
+| Message | Why |
+|---|---|
+| ``the PDF at index 1 cannot be read: it is not a PDF file (it has no `%PDF-` header)`` | The data is no PDF; with another reason, the PDF is damaged beyond repair, has no pages, or a page refers to objects that do not exist |
+| `the PDF at index 0 is encrypted; only PDFs without encryption can be merged` | The PDF is encrypted |
+| `the PDF at index 2 has 3 pages, not page 5` | `pages` names a page the PDF does not have |
+
+A merge without PDFs, and `pages` that are no page numbers, throw an `InvalidArgumentException`
+before anything is sent. The [memory budget and time limit](php.md#limits) of the engine apply:
+the PDFs, and the content of their pages decoded, count against the budget.
+
+Without `created()`, a merged PDF has no creation date, and the same PDFs give the same bytes on
+every platform.
+
 ## Make the output reproducible
 
 A PDF contains its creation date, by default the current time, so two renderings of the same
@@ -1267,7 +1357,8 @@ date in UTC.
 The output is the same for the same HTML, resources, fonts, options and version of Fagus, on
 every platform. Fonts installed on the machine (`systemFonts: true`) make it depend on the
 machine, and an encrypted PDF differs every time: its keys are random (see
-[Protect the PDF with a password](#protect-the-pdf-with-a-password)).
+[Protect the PDF with a password](#protect-the-pdf-with-a-password)). A [merged PDF](#merge-pdfs)
+has no creation date unless you give it one.
 
 ## File size and compression
 

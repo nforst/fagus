@@ -303,8 +303,9 @@ its layout.
 
 The types inside are exported too: `Error::Pdf` holds a `fagus::PdfError`, either
 `PdfError::Conformance { standard, problems }` (the standard, like `PDF/UA-1`, and the problems in
-words, separated by semicolons), `PdfError::Write(String)` or `PdfError::Sign(String)` (the
-signature could not be made: a wrong password, a signer that failed); `Error::Font` holds a
+words, separated by semicolons), `PdfError::Write(String)`, `PdfError::Sign(String)` (the
+signature could not be made: a wrong password, a signer that failed) or one of a
+[merge](#merge-pdfs); `Error::Font` holds a
 `fagus::FontError`, `FontError::InvalidFont` or `FontError::Io(std::io::Error)`. The three enums
 are `#[non_exhaustive]`: a `match` over them needs a `_` arm. Their `Display` gives the whole
 message:
@@ -334,6 +335,47 @@ match engine.render_with_diagnostics(&document.accessible()) {
     }
 }
 ```
+
+## Merge PDFs
+
+`Merge` puts the pages of finished PDFs one after another into a new PDF, on the calling thread,
+without an engine. `fagus::merge` merges every page of each PDF; the builder takes some pages of
+a PDF and the metadata of the merged PDF:
+
+```rust
+use fagus::{Date, Merge, PageRanges};
+
+let output = fagus::merge([std::fs::read("1.pdf")?, std::fs::read("2.pdf")?])?;
+std::fs::write("batch.pdf", &output.pdf)?;
+
+let terms = std::sync::Arc::new(std::fs::read("terms.pdf")?);
+let output = Merge::new()
+    .add(engine.render(&document)?.pdf)
+    .add_pages(std::sync::Arc::clone(&terms), "1-2".parse::<PageRanges>()?)
+    .title("Invoice 2026-0042")
+    .author("Accounting")
+    .language("de-DE")
+    .created(Date::new(2026, 11, 1, 8, 0, 0))
+    .write()?;
+```
+
+| Method | Description |
+|---|---|
+| `add(impl Into<Arc<Vec<u8>>>)` | Every page of a PDF |
+| `add_pages(impl Into<Arc<Vec<u8>>>, PageRanges)` | Some pages of a PDF, in the order given |
+| `title(…)`, `author(…)` (repeatable), `language(…)` | The metadata of the merged PDF; nothing is taken from the PDFs |
+| `created(Date)` | The creation date; without it the merged PDF has none, and the same PDFs give the same bytes |
+| `limits(Limits)` | The memory budget and time limit of the merge (default `Limits::new()`); the PDFs and the content of their pages decoded count against the budget |
+| `write()` | Merges, and returns an `Output` with `pdf`, `pages` and `timings.pdf` |
+
+`PageRanges` are page numbers from 1 and ranges of them: `"1-3,5,8-".parse()`,
+`PageRanges::parse(…)`, `PageRanges::range(first, last)` or `PageRanges::all()`; its `Display`
+writes them back. A PDF added more than once as the same `Arc` is read once. `write()` fails with
+`Error::Pdf` holding `PdfError::NothingToMerge`, `PdfError::Unreadable { input, reason }`,
+`PdfError::Encrypted { input }` or `PdfError::NoPage { input, page, pages }`, where `input` is
+the index of the PDF among those added, from 0; invalid pages fail to parse with
+`PdfError::PageRanges { text, reason }`. What the merged PDF keeps and what it leaves out is
+described in [pdf.md](pdf.md#merge-pdfs).
 
 ## Threads
 
@@ -379,8 +421,8 @@ that uses it. So that a minor release can add a variant or a field, these types 
 
 `Severity` is not: `Info`, `Warning` and `Error` are the severities of the command line and the
 worker protocol and stay the same within a major release. Which severity a diagnostic gets is not
-stable. `Document`, `Engine`, `Encryption`, `InitialView`, `Signature` and `Limits` have no public
-fields. The
+stable. `Document`, `Engine`, `Encryption`, `InitialView`, `Signature`, `Limits`, `Merge` and
+`PageRanges` have no public fields. The
 traits `ResourceLoader`, `Signer`, `Timestamper` and `Revocation` get new methods only with a
 default implementation.
 

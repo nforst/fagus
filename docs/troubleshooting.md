@@ -149,6 +149,16 @@ The fagus binary cannot encrypt PDFs and wrote the PDF without a password. Insta
 `encrypt()` was called, but the binary is older than encryption and left the passwords out. The
 PDF is not handed out. Use the binary of the package's release.
 
+### A binary that cannot merge
+
+```text
+The fagus binary `/usr/local/bin/fagus` (version 1.1.1) cannot merge PDFs, which needs version 1.2.0 or later. Install the binary of the package's release with `vendor/bin/fagus-install` (in Laravel: `php artisan fagus:install`), or point FAGUS_BINARY at the binary of version 1.2.0.
+```
+
+`Fagus::merge()` was rendered with a binary older than merging ([pdf.md](pdf.md#merge-pdfs)).
+Nothing is sent to it, and it goes on rendering documents. Use the binary of the package's
+release.
+
 ## Rendering
 
 ### The worker did not answer in time
@@ -290,6 +300,22 @@ Unknown PDF/A level '4z'. The levels are '1b', '2b', '2u', '2a', '3b', '3u', '3a
 
 `pdfA()` got a string that is not a level. It throws a `Fagus\Exception\InvalidArgumentException`
 when it is called, before anything is rendered. Pass one of the levels, or a `Conformance` case.
+
+### A PDF cannot be merged
+
+```text
+the PDF at index 1 is encrypted; only PDFs without encryption can be merged
+```
+
+A `RenderException` from `Fagus::merge()`: the PDF at that index among those added (from 0) is
+encrypted, is no PDF or damaged beyond repair (``the PDF at index 0 cannot be read: …``), or
+lacks a page that `pages` names (`the PDF at index 2 has 3 pages, not page 5`). See
+[pdf.md](pdf.md#when-a-pdf-cannot-be-merged). Pages that are no page numbers throw an
+`InvalidArgumentException` when they are added:
+
+```text
+Invalid pages `3-1`: a range ends before it begins.
+```
 
 ### The PDF cannot be saved
 

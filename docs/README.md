@@ -37,7 +37,8 @@ things up in.
 ## The PDF
 
 - [The PDF](pdf.md): metadata, links and the outline, tagged and accessible PDF (PDF/UA), PDF/A,
-  attachments, electronic invoices (ZUGFeRD, Factur-X, XRechnung), reproducible output.
+  attachments, electronic invoices (ZUGFeRD, Factur-X, XRechnung), reproducible output, merging
+  finished PDFs into one.
 
 ## Without PHP
 

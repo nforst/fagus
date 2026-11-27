@@ -22,7 +22,7 @@ Security fixes may break what relied on the hole, in any release.
 What these pages describe is the public API:
 
 - **PHP and Laravel:** the classes, methods, enums and exceptions of [PHP API](php.md), with the
-  names of their parameters; the facade, `PendingPdf`, the configuration keys and the commands of
+  names of their parameters; the facade, `PendingPdf`, `PendingMerge`, the configuration keys and the commands of
   [Laravel](laravel.md); `Installer` and `vendor/bin/fagus-install`; the environment variables
   (`FAGUS_BINARY`, `FAGUS_DOWNLOAD_URL`, `FAGUS_GITHUB_TOKEN`, `FAGUS_INSTALL_STRICT` with
   `extra.fagus.install-strict` in `composer.json`, and those of `config/fagus.php`
