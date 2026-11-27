@@ -33,8 +33,18 @@ if [[ ! -d $checkout/.git ]]; then
 fi
 git -C "$checkout" sparse-checkout set --cone "${directories[@]}"
 if [[ $(git -C "$checkout" rev-parse -q --verify HEAD 2> /dev/null) != "$WPT_COMMIT" ]]; then
-  # Only the commit, and the contents of files only as the sparse checkout needs them.
-  git -C "$checkout" fetch -q --depth 1 --filter=blob:none origin "$WPT_COMMIT"
-  git -C "$checkout" -c advice.detachedHead=false checkout -q --detach "$WPT_COMMIT"
+  # Only the commit, and the contents of files only as the sparse checkout needs them. GitHub
+  # refuses a fetch now and then ("not our ref"), so it is tried a few times.
+  for attempt in 1 2 3 4; do
+    if git -C "$checkout" fetch -q --depth 1 --filter=blob:none origin "$WPT_COMMIT" \
+      && git -C "$checkout" -c advice.detachedHead=false checkout -q --detach "$WPT_COMMIT"; then
+      break
+    fi
+    if [[ $attempt == 4 ]]; then
+      exit 1
+    fi
+    echo "fetching web-platform-tests failed, again in $((attempt * 15)) seconds" >&2
+    sleep $((attempt * 15))
+  done
 fi
 echo "web-platform-tests $WPT_COMMIT in $checkout"
