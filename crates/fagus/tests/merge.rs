@@ -52,6 +52,11 @@ fn fixture(name: &str) -> Vec<u8> {
 /// A PDF file of `objects` (numbered from 1, the first the catalog), with a cross-reference
 /// table.
 fn handmade(objects: &[&str]) -> Vec<u8> {
+    handmade_with(objects, "")
+}
+
+/// [`handmade`] with `trailer` added to the trailer dictionary.
+fn handmade_with(objects: &[&str], trailer: &str) -> Vec<u8> {
     let mut out = b"%PDF-1.4\n".to_vec();
     let mut offsets = Vec::new();
     for (index, object) in objects.iter().enumerate() {
@@ -65,7 +70,7 @@ fn handmade(objects: &[&str]) -> Vec<u8> {
     }
     out.extend(
         format!(
-            "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n",
+            "trailer\n<< /Size {} /Root 1 0 R{trailer} >>\nstartxref\n{xref}\n%%EOF\n",
             objects.len() + 1
         )
         .as_bytes(),
@@ -613,6 +618,22 @@ fn says_which_pdf_it_cannot_merge_and_why() {
         error(Merge::new().add(owner_only)),
         PdfError::Encrypted { input: 0 }
     ));
+
+    // A key longer than the revision of its encryption allows, which hayro-syntax panics on.
+    let tree = "<< /Type /Pages /Kids [3 0 R] /Count 1 >>";
+    let page = "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] >>";
+    let zeros = "0".repeat(64);
+    let encrypt = format!("<< /Filter /Standard /V 2 /R 3 /Length 256 /O <{zeros}> /U <{zeros}> /P -4 >>");
+    let id = format!(" /Encrypt 4 0 R /ID [<{zeros}> <{zeros}>]");
+    let long_key = handmade_with(&["<< /Type /Catalog /Pages 2 0 R >>", tree, page, &encrypt], &id);
+    let refused = error(Merge::new().add(long_key));
+    assert!(
+        matches!(
+            refused,
+            PdfError::Unreadable { input: 0, .. } | PdfError::Encrypted { input: 0 }
+        ),
+        "{refused:?}"
+    );
 
     let missing = error(Merge::new().add_pages(good.clone(), "1,3".parse().expect("pages")));
     assert!(matches!(

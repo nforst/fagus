@@ -301,13 +301,18 @@ fn open(index: usize, data: &Arc<Vec<u8>>) -> Result<Pdf, PdfError> {
     if !pdf_image::is_pdf(data) {
         return Err(unreadable("it is not a PDF file (it has no `%PDF-` header)"));
     }
-    let pdf = Pdf::new(Arc::clone(data)).map_err(|error| match error {
-        LoadPdfError::Decryption(_) => PdfError::Encrypted { input: index },
-        LoadPdfError::Invalid => unreadable("its structure cannot be read"),
-    })?;
+    // hayro-syntax panics on a few broken encryption dictionaries (a key longer than its
+    // revision allows): such a PDF cannot be read.
+    let pdf = fagus_css::guarded(|| Pdf::new(Arc::clone(data)))
+        .unwrap_or(Err(LoadPdfError::Invalid))
+        .map_err(|error| match error {
+            LoadPdfError::Decryption(_) => PdfError::Encrypted { input: index },
+            LoadPdfError::Invalid => unreadable("its structure cannot be read"),
+        })?;
     // One that opens without a password but is encrypted all the same restricts what may be
     // done with it (its owner password lifts the restrictions); a merge would drop them.
-    if let Err(LoadPdfError::Decryption(_)) = Pdf::new_with_password(Arc::clone(data), PROBE) {
+    let probed = fagus_css::guarded(|| Pdf::new_with_password(Arc::clone(data), PROBE).err());
+    if !matches!(probed, Some(None | Some(LoadPdfError::Invalid))) {
         return Err(PdfError::Encrypted { input: index });
     }
     if pdf.pages().is_empty() {
