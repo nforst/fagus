@@ -685,7 +685,7 @@ dependencies = [
 
 [[package]]
 name = "fagus"
-version = "1.1.1"
+version = "1.2.0"
 dependencies = [
  "fagus-css",
  "fagus-dom",
@@ -701,7 +701,7 @@ dependencies = [
 
 [[package]]
 name = "fagus-css"
-version = "1.1.1"
+version = "1.2.0"
 dependencies = [
  "cssparser",
  "fagus-dom",
@@ -714,7 +714,7 @@ dependencies = [
 
 [[package]]
 name = "fagus-dom"
-version = "1.1.1"
+version = "1.2.0"
 dependencies = [
  "html5ever",
  "markup5ever",
@@ -742,7 +742,7 @@ dependencies = [
 
 [[package]]
 name = "fagus-invariants"
-version = "1.1.1"
+version = "1.2.0"
 dependencies = [
  "fagus",
  "fagus-dom",
@@ -751,7 +751,7 @@ dependencies = [
 
 [[package]]
 name = "fagus-layout"
-version = "1.1.1"
+version = "1.2.0"
 dependencies = [
  "fagus-css",
  "fagus-dom",
@@ -767,7 +767,7 @@ dependencies = [
 
 [[package]]
 name = "fagus-paint"
-version = "1.1.1"
+version = "1.2.0"
 dependencies = [
  "fagus-dom",
  "fagus-layout",
@@ -779,7 +779,7 @@ dependencies = [
 
 [[package]]
 name = "fagus-pdf"
-version = "1.1.1"
+version = "1.2.0"
 dependencies = [
  "aes",
  "cbc",
@@ -824,7 +824,7 @@ dependencies = [
 
 [[package]]
 name = "fagus-style"
-version = "1.1.1"
+version = "1.2.0"
 dependencies = [
  "fagus-css",
  "fagus-dom",
@@ -836,7 +836,7 @@ dependencies = [
 
 [[package]]
 name = "fagus-text"
-version = "1.1.1"
+version = "1.2.0"
 dependencies = [
  "brotli-decompressor 5.0.3",
  "fontconfig-parser",

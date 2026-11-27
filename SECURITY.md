@@ -8,9 +8,10 @@ Security fixes go into the latest minor version, as a patch release. Once a new 
 
 | Version | Security fixes |
 |---|---|
-| 1.1.x | Yes |
-| 1.0.x | No (update to 1.1) |
-| < 1.0 | No (update to 1.1) |
+| 1.2.x | Yes |
+| 1.1.x | No (update to 1.2) |
+| 1.0.x | No (update to 1.2) |
+| < 1.0 | No (update to 1.2) |
 
 After a new major version, the table reads like this, for example after 2.0.0 and 2.1.0:
 

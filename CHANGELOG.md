@@ -5,6 +5,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-27
+
 ### Added
 
 - Rust: `ResourceLoader::load_many(&[&str])` answers many URLs at once, so that a loader can fetch them concurrently. A render asks with it for the resources it knows before it uses them: the linked style sheets of a document, then the first font file of each `@font-face` rule, then the images, at most `fagus::BATCH` (64) URLs at a time. The default implementation calls `load` for one after the other, so an existing loader is asked for the same URLs as before, and the PDF is the same either way. `@import`ed style sheets, later sources of a font, the sprites of inline SVG and the documents of `<iframe>`s are still asked for one by one.
@@ -200,7 +202,8 @@ The first release: a native engine that turns HTML and CSS into PDF the way Chro
 - No network access and no scripts: resources come only from `data:` URLs, the caller and files inside the document's root directory.
 - Limits on nesting, grids, frames, images and the size of substituted values, so that hostile documents render in bounded time and memory, and a panic becomes an error instead of ending the caller. The engine has no `unsafe` code of its own.
 
-[Unreleased]: https://github.com/nforst/fagus/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/nforst/fagus/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/nforst/fagus/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/nforst/fagus/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/nforst/fagus/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/nforst/fagus/compare/v0.2.0...v1.0.0
