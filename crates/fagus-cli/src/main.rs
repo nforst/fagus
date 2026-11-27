@@ -3,6 +3,7 @@
 mod date;
 mod layout_json;
 mod memory;
+mod merge;
 mod request;
 mod sandbox;
 mod worker;
@@ -11,7 +12,7 @@ use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(name = "fagus", version, about = "HTML and CSS to PDF, without a browser")]
@@ -111,6 +112,35 @@ enum Command {
         view: ViewArgs,
         #[command(flatten)]
         sign: Sign,
+        #[command(flatten)]
+        limits: LimitArgs,
+        #[command(flatten)]
+        confinement: Confinement,
+    },
+    /// Merges PDF files into one, the pages of each after those of the one before.
+    Merge {
+        /// The PDF files, in order. `--pages` after a file takes only those of its pages.
+        #[arg(required = true, value_name = "PDF")]
+        inputs: Vec<PathBuf>,
+        /// The pages of the PDF file before it, in order, counted from 1: such as `2`, `1-3`,
+        /// `4-` (to the last page) or `1-3,5,8-` (default: every page).
+        #[arg(long, value_name = "PAGES")]
+        pages: Vec<String>,
+        /// The PDF file to write.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// The title of the merged PDF.
+        #[arg(long)]
+        title: Option<String>,
+        /// An author of the merged PDF (repeatable).
+        #[arg(long = "author")]
+        authors: Vec<String>,
+        /// The language of the merged PDF, e.g. `de-DE`.
+        #[arg(long)]
+        language: Option<String>,
+        /// The creation date written into the PDF, e.g. `2026-11-13T12:00:00Z` (default: none).
+        #[arg(long)]
+        created: Option<String>,
         #[command(flatten)]
         limits: LimitArgs,
         #[command(flatten)]
@@ -541,7 +571,9 @@ fn start_threads() {
 }
 
 fn main() -> Result<()> {
-    match Cli::parse().command {
+    let matches = Cli::command().get_matches();
+    let cli = Cli::from_arg_matches(&matches).unwrap_or_else(|error| error.exit());
+    match cli.command {
         Command::Render {
             input,
             output,
@@ -749,6 +781,75 @@ fn main() -> Result<()> {
                 );
             }
             Ok(())
+        }
+        Command::Merge {
+            inputs,
+            pages,
+            output,
+            title,
+            authors,
+            language,
+            created,
+            limits,
+            confinement,
+        } => {
+            confinement.limit()?;
+            let subcommand = matches.subcommand_matches("merge").expect("the merge command");
+            let selections = merge::selections(
+                &subcommand
+                    .indices_of("inputs")
+                    .into_iter()
+                    .flatten()
+                    .collect::<Vec<_>>(),
+                &subcommand
+                    .indices_of("pages")
+                    .into_iter()
+                    .flatten()
+                    .zip(pages)
+                    .collect::<Vec<_>>(),
+            )?;
+            let mut merge = fagus::Merge::new().limits(limits.limits());
+            for (path, pages) in inputs.iter().zip(selections) {
+                let data = std::fs::read(path).with_context(|| format!("reading {}", path.display()))?;
+                merge = match pages {
+                    Some(pages) => merge.add_pages(data, pages),
+                    None => merge.add(data),
+                };
+            }
+            if let Some(title) = title {
+                merge = merge.title(title);
+            }
+            for author in authors {
+                merge = merge.author(author);
+            }
+            if let Some(language) = language {
+                merge = merge.language(language);
+            }
+            if let Some(created) = created {
+                let Some(date) = request::date(&created) else {
+                    bail!(
+                        "invalid date `{created}`, expected e.g. 2026-11-13T12:00:00Z or 2026-11-13T14:00:00+02:00"
+                    );
+                };
+                merge = merge.created(date);
+            }
+            // Opened before the sandbox, which does not let the process create files; the PDF
+            // files are read already, so it reads none.
+            let path = output;
+            let output = Output::open(&path).with_context(|| format!("writing {}", path.display()))?;
+            confinement.enter(&sandbox::Policy {
+                read: Some(Vec::new()),
+                remove: output.directory().into_iter().collect(),
+            });
+            match merge.write() {
+                Ok(merged) => output
+                    .write(&merged.pdf)
+                    .with_context(|| format!("writing {}", path.display())),
+                Err(error) => {
+                    output.discard();
+                    Err(merge::named(error, &inputs))
+                }
+            }
         }
         Command::Worker {
             font_dirs,
