@@ -27,6 +27,17 @@ final class Fagus
     }
 
     /**
+     * PDFs to merge into one, every page of each, one after another: PDF files as strings, or
+     * rendered {@see Pdf}s. {@see Merge::add()} adds more, or some pages of one.
+     *
+     * @param  iterable<Pdf|string>  $pdfs
+     */
+    public static function merge(iterable $pdfs = []): Merge
+    {
+        return Merge::of($pdfs);
+    }
+
+    /**
      * The engine documents render with unless one is given: the one set with
      * {@see self::useEngine()}, or one with the binary from FAGUS_BINARY, the installer or the
      * PATH.

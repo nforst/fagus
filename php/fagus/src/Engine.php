@@ -21,6 +21,9 @@ final class Engine
 {
     public const PROTOCOL = 1;
 
+    /** The first release of the binary that merges PDFs. */
+    public const MERGE_SINCE = '1.2.0';
+
     /** Seconds a worker gets to end after its input is closed, before it is terminated. */
     private const GRACE = 2.0;
 
@@ -48,6 +51,9 @@ final class Engine
     private ?Channel $channel = null;
 
     private ?string $version = null;
+
+    /** The path of the running binary. */
+    private ?string $located = null;
 
     /** How much of its sandbox the running worker is in, as its hello says. */
     private string $sandboxed = 'off';
@@ -200,6 +206,57 @@ final class Engine
 
             throw $exception;
         }
+    }
+
+    /**
+     * Merges PDFs into one, in the worker as documents render.
+     *
+     * @throws EngineException when the binary is older than merging
+     * @throws RenderException when a PDF cannot be merged (it cannot be read, is encrypted, or
+     *                         lacks a page to take), or the merge exceeds its limits
+     */
+    public function merge(Merge $merge): Pdf
+    {
+        $channel = $this->start();
+        // A binary older than merging answers the request as a message it does not know; the
+        // binary of this package's release merges, also before its version says 1.2.0.
+        if (version_compare((string) $this->version, self::MERGE_SINCE, '<') && $this->version !== Release::VERSION) {
+            throw EngineException::cannotMerge($this->located, $this->version);
+        }
+        [$header, $blobs] = $merge->request(++$this->requests);
+        $header += $this->limits();
+        try {
+            $channel->write('M', $header, $blobs);
+            [$kind, $reply, $data] = $channel->read();
+        } catch (Throwable $exception) {
+            // The worker may still be merging: it is stopped, and the next request starts a
+            // new one.
+            $exception = $exception instanceof EngineException ? $this->withOutput($exception) : $exception;
+            $this->stop();
+
+            throw $exception;
+        }
+        if ($kind === 'P') {
+            $this->rendered($reply);
+
+            return Pdf::fromReply($reply, $data[0] ?? '');
+        }
+        // A worker that does not know the request answers without its `id`, and goes on.
+        if ($kind === 'E' && ! isset($reply['id'])) {
+            throw EngineException::cannotMerge($this->located, $this->version);
+        }
+        if ($kind === 'E') {
+            $this->rendered($reply);
+
+            throw new RenderException(
+                (string) ($reply['message'] ?? 'The PDFs could not be merged.'),
+                array_values(array_map(Diagnostic::fromArray(...), $reply['diagnostics'] ?? [])),
+            );
+        }
+        $exception = $this->withOutput(EngineException::unexpected($kind));
+        $this->stop();
+
+        throw $exception;
     }
 
     /**
@@ -383,6 +440,7 @@ final class Engine
             throw $exception;
         }
         $this->version = (string) $version;
+        $this->located = $binary;
         if ($this->version !== Release::VERSION) {
             $this->warnOnce($binary, $this->version);
         }

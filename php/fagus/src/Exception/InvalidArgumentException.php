@@ -61,4 +61,14 @@ final class InvalidArgumentException extends FagusException
     {
         return new self("The invoice {$field} must not be empty.");
     }
+
+    public static function invalidPages(string $pages, string $reason): self
+    {
+        return new self("Invalid pages `{$pages}`: {$reason}.");
+    }
+
+    public static function nothingToMerge(): self
+    {
+        return new self('There are no PDFs to merge; add them with add() or addFile().');
+    }
 }

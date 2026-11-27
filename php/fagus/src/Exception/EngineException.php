@@ -84,6 +84,21 @@ final class EngineException extends FagusException
         return new self('The fagus binary cannot make form fields and wrote the controls as they look. Install the binary of the same release.');
     }
 
+    /**
+     * The message for a binary older than merging, which answers the merge request as a message
+     * it does not know.
+     *
+     * @param  ?string  $binary  the path of the binary
+     * @param  ?string  $version  the version of the binary, if it named one
+     */
+    public static function cannotMerge(?string $binary, ?string $version): self
+    {
+        $which = $binary === null ? 'The fagus binary' : "The fagus binary `{$binary}`";
+        $which .= $version === null || $version === '' ? '' : " (version {$version})";
+
+        return new self("{$which} cannot merge PDFs, which needs version ".Engine::MERGE_SINCE.' or later. '.self::installHint());
+    }
+
     public static function unexpected(string $kind): self
     {
         return new self("The fagus worker sent an unexpected message `{$kind}`.");

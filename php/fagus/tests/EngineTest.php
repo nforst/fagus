@@ -8,6 +8,7 @@ use Fagus\Document;
 use Fagus\Engine;
 use Fagus\Exception\EngineException;
 use Fagus\Exception\InvalidArgumentException;
+use Fagus\Fagus;
 use Fagus\Internal\Release;
 use Fagus\Signature;
 use Fagus\Tests\Fixtures\FakeWorker;
@@ -201,6 +202,37 @@ final class EngineTest extends TestCase
 
         // Without a resolver the document does not allow questions.
         $this->assertSame([], FakeWorker::answers(Document::html('<p>x</p>')->render($engine)->bytes()));
+    }
+
+    #[Test]
+    public function it_refuses_to_merge_with_a_binary_older_than_merging(): void
+    {
+        // Known by its version: nothing is sent.
+        $binary = $this->fake(version: '1.1.0');
+        try {
+            Fagus::merge(['%PDF-'])->render(new Engine($binary, onWarning: static function (string $warning): void {}));
+            $this->fail('An older binary was asked to merge.');
+        } catch (EngineException $exception) {
+            $this->assertSame(
+                "The fagus binary `{$binary}` (version 1.1.0) cannot merge PDFs, which needs version 1.2.0 or later. "
+                ."Install the binary of the package's release with `vendor/bin/fagus-install` (in Laravel: `php artisan fagus:install`), "
+                .'or point FAGUS_BINARY at the binary of version '.Release::VERSION.'.',
+                $exception->getMessage(),
+            );
+        }
+
+        // A binary that claims the package's release but does not know the request answers it
+        // as a message it does not know; the worker goes on.
+        $engine = new Engine($binary = $this->fake());
+        $before = FakeWorker::parse(Document::html('<p>x</p>')->render($engine)->bytes());
+        try {
+            Fagus::merge(['%PDF-'])->render($engine);
+            $this->fail('The answer of an older binary was taken.');
+        } catch (EngineException $exception) {
+            $this->assertStringStartsWith("The fagus binary `{$binary}` (version ".Release::VERSION.') cannot merge PDFs', $exception->getMessage());
+        }
+        $after = FakeWorker::parse(Document::html('<p>x</p>')->render($engine)->bytes());
+        $this->assertSame([$before[0], 2], $after);
     }
 
     /**
