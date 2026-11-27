@@ -721,7 +721,7 @@ fn attempt(
                 .with_bleed_box(boxed(around - page.bleed));
         }
         let mut pdf_page = document.start_page_with(settings);
-        let mut surface = pdf_page.surface();
+        let mut surface = Drawing::new(pdf_page.surface());
         surface.push_transform(&Transform::from_scale(DRAW_SCALE, DRAW_SCALE));
         surface.push_transform(&turn(page));
         if marked {
@@ -842,7 +842,7 @@ fn attempt(
             continue;
         };
         let mut pdf_page = document.start_page_with(PageSettings::new(size));
-        let mut surface = pdf_page.surface();
+        let mut surface = Drawing::new(pdf_page.surface());
         surface.push_transform(&Transform::from_scale(DRAW_SCALE, DRAW_SCALE));
         let mut transforms = vec![Some(IDENTITY)];
         let items = if appearance.off {
@@ -1071,6 +1071,49 @@ fn link_annotation(
 /// character would be lost to text extraction and only later ones, whose text differs from
 /// that, get their own (`ActualText`). With empty text first, every use of glyph 0 differs
 /// from it and keeps its character.
+/// A krilla surface that is not dropped while a panic unwinds through it: krilla's `Drop`
+/// asserts that every push was popped, which a panic in the middle of drawing leaves undone, and
+/// that second panic aborts the process (the CLI, the worker, a program with the engine) instead
+/// of ending the render with an error. Unwinding happens for a panic of a dependency and where a
+/// document runs out of its memory budget or time ([`fagus_dom::budget`]). The surface is then
+/// forgotten: the page it drew is thrown away with the document, and what it held is not freed.
+struct Drawing<'a>(Option<Surface<'a>>);
+
+impl<'a> Drawing<'a> {
+    fn new(surface: Surface<'a>) -> Self {
+        Self(Some(surface))
+    }
+
+    /// Finishes the surface, as dropping it does.
+    fn finish(mut self) {
+        drop(self.0.take());
+    }
+}
+
+impl<'a> std::ops::Deref for Drawing<'a> {
+    type Target = Surface<'a>;
+
+    fn deref(&self) -> &Surface<'a> {
+        self.0.as_ref().expect("a surface until finished")
+    }
+}
+
+impl<'a> std::ops::DerefMut for Drawing<'a> {
+    fn deref_mut(&mut self) -> &mut Surface<'a> {
+        self.0.as_mut().expect("a surface until finished")
+    }
+}
+
+impl Drop for Drawing<'_> {
+    fn drop(&mut self) {
+        if std::thread::panicking()
+            && let Some(surface) = self.0.take()
+        {
+            std::mem::forget(surface);
+        }
+    }
+}
+
 fn seed_notdef(surface: &mut Surface<'_>, font: &Font) {
     let notdef = KrillaGlyph::new(GlyphId::new(0), 0.0, 0.0, 0.0, 0.0, 0..0, None);
     surface.draw_glyphs(Point::from_xy(0.0, 0.0), &[notdef], font.clone(), "", 0.0, false);
@@ -1731,7 +1774,7 @@ fn draw_svg(surface: &mut Surface<'_>, tree: &Arc<usvg::Tree>, size: Size, cache
         Some(Some(graphic)) => graphic.clone(),
         Some(None) => {
             let mut builder = surface.stream_builder();
-            let mut inner = builder.surface();
+            let mut inner = Drawing::new(builder.surface());
             inner.push_transform(&linear);
             inner.draw_svg(tree, size, settings);
             inner.pop();
@@ -2606,7 +2649,7 @@ fn draw(
         } => {
             // The tile once, in a stream of its own, which the viewer repeats.
             let mut builder = surface.stream_builder();
-            let mut inner = builder.surface();
+            let mut inner = Drawing::new(builder.surface());
             let mut inner_transforms = vec![current];
             // The viewer repeats the tile anywhere in the area: all of it may show.
             draw(
@@ -2864,7 +2907,7 @@ fn draw(
         Item::PushMask(mask) => {
             // The mask's items, drawn where it applies, in a stream of their own.
             let mut builder = surface.stream_builder();
-            let mut inner = builder.surface();
+            let mut inner = Drawing::new(builder.surface());
             let mut inner_transforms = vec![current];
             for item in &mask.items {
                 draw(
@@ -3677,6 +3720,32 @@ mod tests {
         BorderStyle, Conformance, Date, RectF, centerline, chrome_sheet_side, dash_pattern, dash_rectangles,
         fake_bold_width,
     };
+
+    #[test]
+    fn unwinds_through_a_surface_in_the_middle_of_drawing() {
+        // krilla's surface asserts in `Drop` that every push was popped: a panic while a page is
+        // drawn (of a dependency, or the end of a document's budget) aborted the process there.
+        let unwound = std::panic::catch_unwind(|| {
+            let mut document = krilla::Document::new();
+            let mut page = document.start_page();
+            let mut surface = super::Drawing::new(page.surface());
+            surface.push_transform(&krilla::geom::Transform::from_scale(2.0, 2.0));
+            let mut builder = surface.stream_builder();
+            let mut inner = super::Drawing::new(builder.surface());
+            inner.push_transform(&krilla::geom::Transform::from_scale(2.0, 2.0));
+            std::panic::resume_unwind(Box::new("the budget ran out"));
+        });
+        assert!(unwound.is_err());
+        // Finished, it is written as before.
+        let mut document = krilla::Document::new();
+        let mut page = document.start_page();
+        let mut surface = super::Drawing::new(page.surface());
+        surface.push_transform(&krilla::geom::Transform::from_scale(2.0, 2.0));
+        surface.pop();
+        surface.finish();
+        drop(page);
+        assert!(document.finish().is_ok());
+    }
 
     #[test]
     fn names_the_pdf_a_levels() {
