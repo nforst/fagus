@@ -109,10 +109,14 @@ pub fn probe(data: Arc<Vec<u8>>, fragment: Option<&str>) -> Result<Image, PdfIma
 /// The PDF file `data`, opened as krilla embeds it: one that needs no password (one its owner
 /// only restricts opens without one), of PDF 1.7 at most.
 pub(crate) fn open(data: &Arc<Vec<u8>>) -> Result<Pdf, PdfImageError> {
-    let pdf = Pdf::new(Arc::clone(data)).map_err(|error| match error {
-        LoadPdfError::Decryption(_) => PdfImageError::Password,
-        LoadPdfError::Invalid => PdfImageError::Broken,
-    })?;
+    // hayro-syntax panics on a few broken encryption dictionaries (a key longer than its
+    // revision allows): such a file is broken.
+    let pdf = fagus_css::guarded(|| Pdf::new(Arc::clone(data)))
+        .unwrap_or(Err(LoadPdfError::Invalid))
+        .map_err(|error| match error {
+            LoadPdfError::Decryption(_) => PdfImageError::Password,
+            LoadPdfError::Invalid => PdfImageError::Broken,
+        })?;
     if pdf.version() > PdfVersion::Pdf17 {
         return Err(PdfImageError::Version);
     }
@@ -345,6 +349,32 @@ mod tests {
                    /Rotate 90 /UserUnit 2 >>",
             ],
         )
+    }
+
+    #[test]
+    fn takes_an_encryption_that_hayro_cannot_read_as_broken() {
+        // A key of 256 bits for a revision that allows 128 at most: hayro-syntax panics on it.
+        let zeros = "0".repeat(64);
+        let encrypt =
+            format!("<< /Filter /Standard /V 2 /R 3 /Length 256 /O <{zeros}> /U <{zeros}> /P -4 >>");
+        let data = String::from_utf8(pdf(
+            "1.4",
+            &[
+                b"<< /Type /Catalog /Pages 2 0 R >>",
+                b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+                b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] >>",
+                encrypt.as_bytes(),
+            ],
+        ))
+        .expect("text")
+        .replace(
+            "/Root 1 0 R >>",
+            &format!("/Root 1 0 R /Encrypt 4 0 R /ID [<{zeros}> <{zeros}>] >>"),
+        );
+        assert_eq!(
+            probe(Arc::new(data.into_bytes()), None).err(),
+            Some(PdfImageError::Broken)
+        );
     }
 
     #[test]
