@@ -76,7 +76,9 @@ pub fn probe(data: Arc<Vec<u8>>, fragment: Option<&str>) -> Result<Image, PdfIma
         return Err(PdfImageError::NoPage(page + 1, pages.len()));
     };
     content_size(chosen.raw())?;
-    if !readable(&pdf, page as usize) || !complete(&pdf, page as usize) {
+    if !readable(&pdf, page as usize, Extraction::XObject)
+        || !complete(&pdf, page as usize, Extraction::XObject)
+    {
         return Err(PdfImageError::Broken);
     }
     let (width, height) = chosen.render_dimensions();
@@ -124,11 +126,20 @@ pub(crate) fn open(data: &Arc<Vec<u8>>) -> Result<Pdf, PdfImageError> {
     Ok(pdf)
 }
 
+/// How krilla takes a page of another PDF: as a form `XObject` (a PDF image) or as a page of its
+/// own (a merge).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Extraction {
+    XObject,
+    Page,
+}
+
 /// Whether every object that krilla's extraction of the page `page` of `pdf` reads can be read
 /// as it reads it: hayro-write takes the entries of a dictionary that cannot be read, and a
 /// stream where a direct object stands, for granted. It reads the page's resources, those of
-/// the pages above it, and what they refer to, as [`complete`] does.
-fn readable(pdf: &Pdf, page: usize) -> bool {
+/// the pages above it, and what they refer to, as [`complete`] does; a page of its own also its
+/// transparency group.
+pub(crate) fn readable(pdf: &Pdf, page: usize, extraction: Extraction) -> bool {
     // The keys whose values hayro-write leaves out (its `IGNORE_KEYS`).
     const IGNORED: [&[u8]; 10] = [
         b"Metadata",
@@ -175,6 +186,11 @@ fn readable(pdf: &Pdf, page: usize) -> bool {
         }
         resources = level.parent();
     }
+    if extraction == Extraction::Page
+        && let Some(group) = chosen.raw().get_raw::<Object<'_>>(b"Group")
+    {
+        pending.push(group);
+    }
     let mut visited: rustc_hash::FxHashSet<ObjRef> = rustc_hash::FxHashSet::default();
     while let Some(value) = pending.pop() {
         let (object, indirect) = match value {
@@ -208,8 +224,9 @@ fn readable(pdf: &Pdf, page: usize) -> bool {
 
 /// Whether the page `page` of `pdf`, extracted as krilla extracts it, refers only to objects that
 /// exist. krilla cannot write one that refers to missing objects (a reference to an object that
-/// is not in the file, which readers take as `null`).
-fn complete(pdf: &Pdf, page: usize) -> bool {
+/// is not in the file, which readers take as `null`). A page of its own refers to the page tree
+/// as well, which krilla writes.
+pub(crate) fn complete(pdf: &Pdf, page: usize, extraction: Extraction) -> bool {
     let mut next = pdf_writer::Ref::new(1);
     let Ok(extracted) = hayro_write::extract(
         pdf,
@@ -218,14 +235,20 @@ fn complete(pdf: &Pdf, page: usize) -> bool {
         |group| {
             group.color_space().device_rgb();
         },
-        &[hayro_write::ExtractionQuery::new_xobject(page)],
+        &[match extraction {
+            Extraction::XObject => hayro_write::ExtractionQuery::new_xobject(page),
+            Extraction::Page => hayro_write::ExtractionQuery::new_page(page),
+        }],
     ) else {
         return false;
     };
     if !extracted.root_refs.iter().all(Result::is_ok) {
         return false;
     }
-    let written: rustc_hash::FxHashSet<pdf_writer::Ref> = extracted.chunk.refs().collect();
+    let mut written: rustc_hash::FxHashSet<pdf_writer::Ref> = extracted.chunk.refs().collect();
+    if extraction == Extraction::Page {
+        written.insert(extracted.page_tree_parent_ref);
+    }
     let mut missing = false;
     let _ = extracted.chunk.renumber(|old| {
         missing |= !written.contains(&old);

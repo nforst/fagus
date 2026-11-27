@@ -16,6 +16,7 @@ mod forms;
 mod layers;
 mod lossy;
 mod memo;
+pub mod merge;
 mod non_scaling;
 pub use decode::alpha as image_alpha;
 pub use memo::Images;
@@ -41,6 +42,7 @@ mod xmp;
 
 pub use encrypt::{Encryption, Permission};
 pub use forms::{ButtonAction, Field, FieldKind, FieldWidget};
+pub use merge::{MergeInput, Merged, PageRanges};
 pub use tagging::{Element, Numbering, Owner, Repeat, Role, Scope, Structure};
 pub use view::{InitialView, PageLayout, PageMode, Zoom};
 pub use xmp::Extension;
@@ -408,6 +410,26 @@ pub enum PdfError {
     /// An image quality that is not from 1 to 100 ([`Options::image_quality`]).
     #[error("the image quality must be between 1 and 100, not {0}")]
     ImageQuality(u8),
+    /// A merge without PDFs to merge.
+    #[error("there are no PDF files to merge")]
+    NothingToMerge,
+    /// A PDF to merge that cannot be read; `input` is its index among the PDFs, from 0.
+    #[error("the PDF at index {input} cannot be read: {reason}")]
+    Unreadable { input: usize, reason: String },
+    /// A PDF to merge that is encrypted, with a password to open it or one that restricts what
+    /// may be done with it; `input` is its index among the PDFs, from 0.
+    #[error("the PDF at index {input} is encrypted; only PDFs without encryption can be merged")]
+    Encrypted { input: usize },
+    /// A page to merge that a PDF does not have: the page (from 1) and how many the PDF has;
+    /// `input` is its index among the PDFs, from 0.
+    #[error(
+        "the PDF at index {input} has {pages} {}, not page {page}",
+        if *pages == 1 { "page" } else { "pages" }
+    )]
+    NoPage { input: usize, page: usize, pages: usize },
+    /// A selection of pages that cannot be read (see [`PageRanges::parse`]).
+    #[error("invalid pages `{text}`: {reason}")]
+    PageRanges { text: String, reason: String },
 }
 
 /// A PDF document, written.
