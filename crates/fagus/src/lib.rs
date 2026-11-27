@@ -17,6 +17,7 @@ mod frames;
 mod interactive;
 mod layout_info;
 mod limits;
+mod merge;
 mod missing_glyphs;
 mod palette_values;
 mod resources;
@@ -48,12 +49,13 @@ pub use fagus_pdf::sign::{
     timestamp_request,
 };
 pub use fagus_pdf::{
-    Attachment, Conformance, Date, Encryption, InitialView, PageLayout, PageMode, PdfError, Permission,
-    Relationship, Zoom,
+    Attachment, Conformance, Date, Encryption, InitialView, PageLayout, PageMode, PageRanges, PdfError,
+    Permission, Relationship, Zoom,
 };
 pub use fagus_text::FontError;
 pub use layout_info::{Layout, LayoutBox, LayoutElement, LayoutPage, LayoutRow, RowSection};
 pub use limits::Limits;
+pub use merge::{Merge, merge};
 pub use resources::{BATCH, ResourceLoader};
 
 /// An error while rendering.
