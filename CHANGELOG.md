@@ -8,6 +8,7 @@ All notable changes to this project are documented in this file. The format is b
 ### Fixed
 
 - A font whose `post` table has version 2 but ends before its number of glyphs (a table cut short) made krilla panic while it wrote the PDF (in read-fonts), and as that happened while a page was drawn, the panic aborted the process that rendered, the CLI, the worker or a program with the engine, instead of ending the render with an error. Such a font is now one Fagus cannot read: as a web font it is left out with `font.unsupported` and the text takes the next family, `Engine::add_font_data()` refuses it, a font directory skips it, and an installed font is passed over.
+- CSS with `rgb()`, `hsl()` or `light-dark()` nested in each other in a value that does not parse, or in a custom property (`--c: light-dark(light-dark(…` without the closing parts), took twice as long to parse for each level: a style sheet with 22 levels took 13 seconds to render, 30 levels would take an hour, and the time limit could not stop it, as the parser does not look at the clock. A color function inside more than eight of these is now invalid, as a math function inside more than eight math functions already was, and such CSS parses in milliseconds. A value with hundreds of thousands of nested math functions no longer takes quadratic time to look through either.
 
 ## [1.2.0] - 2026-11-27
 

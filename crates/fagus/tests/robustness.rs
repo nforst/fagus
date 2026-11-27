@@ -378,6 +378,25 @@ fn parses_nested_math_functions_that_do_not_parse_in_linear_time() {
 }
 
 #[test]
+fn parses_nested_color_functions_that_do_not_parse_in_linear_time() {
+    // Found by the fuzz target `css`: in a value that lightningcss keeps as tokens, it parses
+    // `rgb()`, `hsl()` and `light-dark()` once as colors and, where that fails, once more as
+    // functions, twice as long for each level of nesting: 13 seconds for 22 levels. No time limit
+    // could stop it, as the clock is looked at only between the parts of the work.
+    let value = "lch(60% light-dark(w: calc(900 ".repeat(40);
+    let rgb = format!("{}]", "rgb(1 2 3 / ".repeat(40));
+    let hsl = format!("{}]", "hsl(1 2% 3% / ".repeat(40));
+    renders_quickly(
+        &format!(
+            "<style>@x {{ :root {{ --c: {value} }} }}</style><style>p {{ color: {rgb} }}</style>\
+             <style>:root {{ --d: {hsl} }}</style><p style='--e: {value}'>x</p>"
+        ),
+        None,
+        5,
+    );
+}
+
+#[test]
 fn places_thousands_of_boxes_against_anchors_in_quadratic_time() {
     // The anchors on the page were found for each box placed against them, each looked up among
     // all found before: cubic, 13 seconds for 2,000 boxes.
