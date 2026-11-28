@@ -2831,6 +2831,7 @@ fn document_metadata(document: &fagus_dom::Document, locale: Option<&str>) -> Me
                     .collect()
             })
             .unwrap_or_default(),
+        creator: meta("generator"),
         ..Metadata::default()
     }
 }
@@ -4257,7 +4258,8 @@ mod tests {
     fn writes_what_the_document_says_about_itself() {
         let html = "<head><title> Rechnung\n RE-1 </title><meta name=author content=\"Muster GmbH\">\
                     <meta name=Description content=\"Rechnung für Oktober\">\
-                    <meta name=keywords content=\"Rechnung, Oktober,\"></head><p>Text";
+                    <meta name=keywords content=\"Rechnung, Oktober,\">\
+                    <meta name=generator content=\"Faktura 3\"></head><p>Text";
         let mut german = engine();
         german.set_locale(Some("de-DE".to_owned()));
         let pdf = german
@@ -4268,6 +4270,8 @@ mod tests {
             "/Title(Rechnung RE-1)",
             "/Author(Muster GmbH)",
             "/Keywords(Rechnung, Oktober)",
+            "/Creator(Faktura 3)",
+            "<xmp:CreatorTool>Faktura 3</xmp:CreatorTool>",
             "/Lang(de-DE)",
             "/ViewerPreferences<</DisplayDocTitle true>>",
         ] {

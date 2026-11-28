@@ -44,6 +44,7 @@ separately: write it into the HTML.
 | Author | `<meta name="author" content="…">` |
 | Subject | `<meta name="description" content="…">` |
 | Keywords | `<meta name="keywords" content="…">`, split at commas |
+| Creator | `<meta name="generator" content="…">`, the application that made the HTML |
 | Producer | `Fagus` |
 | Creation and modification date | `created()`, else the current time |
 

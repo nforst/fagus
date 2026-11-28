@@ -495,6 +495,7 @@ come from the document:
 | Author | `<meta name="author" content="…">` |
 | Subject | `<meta name="description" content="…">` |
 | Keywords | `<meta name="keywords" content="…">`, separated by commas |
+| Creator | `<meta name="generator" content="…">` |
 | Outline (bookmarks) | the headings (`bookmark-level`, `bookmark-label`, `bookmark-state`) |
 
 ## `Merge`
