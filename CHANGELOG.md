@@ -5,6 +5,10 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- `<meta name="generator" content="…">` becomes the Creator of the PDF (`/Creator` in the document information dictionary, `xmp:CreatorTool` in the XMP metadata), as WeasyPrint does, so that the application that made the HTML is named in the PDF's properties. The Producer stays `Fagus`. A document without the tag gives the same PDF as before.
+
 ## [1.2.1] - 2026-11-27
 
 ### Fixed

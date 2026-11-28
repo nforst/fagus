@@ -519,7 +519,7 @@ placeholders. Fagus uses standard CSS for them.
 | `PDFA`, `PDFAauto` | `pdfA('3b')` |
 | `SetAssociatedFiles()` | `attach()` or `facturX()` |
 | `fontDir`, `fontdata` | `@font-face`, or `fontDirectories` on the engine |
-| `SetTitle()`, `SetAuthor()` | `<title>`, `<meta name="author">` |
+| `SetTitle()`, `SetAuthor()`, `SetCreator()` | `<title>`, `<meta name="author">`, `<meta name="generator">` |
 | `SetWatermarkText()` | a positioned element or a background in the document |
 | `SetDocTemplate('letterhead.pdf')` | `@page { background: url(letterhead.pdf) no-repeat }`, positioned by minus the margins ([page templates](paged-media.md#use-a-pdf-as-page-template)) |
 | `SetDocTemplate('letterhead.pdf', true)` (the template's pages in turn) | `@page :nth(2n) { background-image: url(letterhead.pdf#page=2) }`, and so on for more pages |
